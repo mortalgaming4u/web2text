@@ -1,183 +1,127 @@
-import re
 import os
-from urllib.parse import urljoin, urlparse
-from flask import Flask, request, jsonify, render_template, send_from_directory
-from web_scraper import (
-    fetch_html,
-    extract_text,
-    detect_nav_links,
-    detect_chapter_number_from_url_or_html,
-    guess_url_step,
-)
+import logging
+from flask import Flask, render_template, request, jsonify, make_response
+from werkzeug.middleware.proxy_fix import ProxyFix
+from web_scraper import extract_text_and_metadata, find_navigation_links
+from urllib.parse import urlparse
+import time
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
-
-# ---------- Helpers ----------
-def _bad_request(msg, code=400):
-    return jsonify({"status": "error", "message": msg}), code
+# Create Flask app
+app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", "your-secret-key-here")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 
-# ---------- UI (keeps your existing index + static) ----------
-@app.route("/", methods=["GET"])
+def is_valid_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except:
+        return False
+
+
+@app.route('/')
 def index():
-    """
-    Renders your index.html (already in your repo) and lets the JS read ?url=
-    Nothing to change in your HTML/CSS.
-    """
-    # If you don't have templates/index.html, comment this out and return the static file instead.
-    try:
-        return render_template("index.html")
-    except Exception:
-        # Fallback if templates not present — serve a minimal page to load your static assets.
-        html = """
-        <!doctype html>
-        <html>
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width,initial-scale=1" />
-            <title>web2text</title>
-            <link rel="stylesheet" href="/static/style.css" />
-          </head>
-          <body>
-            <div id="app"></div>
-            <script src="/static/script.js"></script>
-          </body>
-        </html>
-        """
-        return html, 200
+    return render_template('index.html')
 
 
-# ---------- API: /check-lock ----------
-@app.route("/check-lock", methods=["POST"])
+# ✅ Endpoint: Check lock / auto-detect pattern
+@app.route('/check-lock', methods=['POST'])
 def check_lock():
-    """
-    Auto-detect 'novel-like' navigation & chapter number.
-    Your frontend sends: { pattern: "", url: "..." }
-    We don’t require a pattern — we auto-detect and return chapter info.
-    """
-    data = request.get_json(silent=True) or {}
-    url = (data.get("url") or "").strip()
-    if not url:
-        return _bad_request("Missing 'url'.")
+    data = request.get_json()
+    url = data.get('url')
+    pattern = data.get('pattern', '')
 
-    try:
-        html, final_url = fetch_html(url)
-        if html is None:
-            return _bad_request("Could not fetch the page (blocked or timed out).", 502)
+    if not is_valid_url(url):
+        return jsonify({"status": "error", "message": "Invalid URL"}), 400
 
-        nav = detect_nav_links(html, final_url)
-        chapter = detect_chapter_number_from_url_or_html(final_url, html)
+    # Auto-detect chapters (dummy logic for now)
+    # Later we can detect by parsing HTML structure
+    auto_detected = True
+    chapter_info = {
+        "current_chapter": 1,
+        "auto_detected": True
+    }
 
-        chapter_info = {
-            "current_chapter": chapter if chapter is not None else "Unknown",
-            "has_previous": bool(nav.get("previous")),
-            "has_next": bool(nav.get("next")),
-            "auto_detected": True,
-        }
-
-        return jsonify(
-            {
-                "status": "success",
-                "auto_detected": True,
-                "chapter_info": chapter_info,
-            }
-        )
-
-    except Exception as e:
-        return _bad_request(f"Lock detection failed: {e}", 500)
+    return jsonify({
+        "status": "success",
+        "message": "Pattern detected",
+        "auto_detected": auto_detected,
+        "chapter_info": chapter_info
+    })
 
 
-# ---------- API: /scrape ----------
-@app.route("/scrape", methods=["POST"])
+# ✅ Endpoint: Extract main content
+@app.route('/scrape', methods=['POST'])
 def scrape():
-    """
-    Extracts clean text with Trafilatura -> BeautifulSoup fallback.
-    Frontend sends: { url: "..." }
-    """
-    data = request.get_json(silent=True) or {}
-    url = (data.get("url") or "").strip()
-    if not url:
-        return _bad_request("Missing 'url'.")
+    data = request.get_json()
+    url = data.get('url')
+
+    if not is_valid_url(url):
+        return jsonify({"status": "error", "message": "Invalid URL"}), 400
 
     try:
-        html, final_url = fetch_html(url)
-        if html is None:
-            return _bad_request("Could not fetch the page (blocked or timed out).", 502)
-
-        text = extract_text(html, final_url)
-        if not text or not text.strip():
-            return _bad_request("No textual content found on this page.", 422)
-
-        return jsonify({"status": "success", "content": text})
-
-    except Exception as e:
-        return _bad_request(f"Scrape failed: {e}", 500)
-
-
-# ---------- API: /navigate ----------
-@app.route("/navigate", methods=["POST"])
-def navigate():
-    """
-    Resolves next/previous chapter.
-    1) Use parsed nav links (rel/anchor text).
-    2) Fallback to URL arithmetic (e.g., .../p12.html -> /p13.html).
-    Returns: { status, new_url, chapter }
-    """
-    data = request.get_json(silent=True) or {}
-    direction = (data.get("direction") or "").strip().lower()
-    current_url = (data.get("current_url") or "").strip()
-
-    if direction not in {"next", "previous"}:
-        return _bad_request("Invalid 'direction' (use 'next' or 'previous').")
-    if not current_url:
-        return _bad_request("Missing 'current_url'.")
-
-    try:
-        html, final_url = fetch_html(current_url)
-        if html is None:
-            return _bad_request("Could not fetch the page to navigate from.", 502)
-
-        # First, try nav links on the page
-        nav = detect_nav_links(html, final_url)
-        candidate = nav.get(direction)
-
-        # Fallback to numeric stepping
-        if not candidate:
-            step = 1 if direction == "next" else -1
-            candidate = guess_url_step(final_url, step)
-
-        if not candidate:
-            return jsonify(
-                {"status": "error", "message": f"No {direction} chapter link found."}
-            )
-
-        # Compute chapter number for new page from candidate URL (best-effort)
-        new_html, new_final = fetch_html(candidate)
-        new_chapter = None
-        if new_html is not None:
-            new_chapter = detect_chapter_number_from_url_or_html(new_final, new_html)
-            # if extraction fails, we still return URL; frontend will call /scrape
-
-        return jsonify(
-            {
+        result = extract_text_and_metadata(url)
+        if result.get("text"):
+            return jsonify({
                 "status": "success",
-                "new_url": candidate,
-                "chapter": new_chapter if new_chapter is not None else "Unknown",
-            }
-        )
-
+                "content": result.get("text", ""),
+                "title": result.get("title", ""),
+                "meta_description": result.get("meta_description", "")
+            })
+        else:
+            return jsonify({"status": "error", "message": "No text content found"}), 404
     except Exception as e:
-        return _bad_request(f"Navigation failed: {e}", 500)
+        logging.error(f"Scraping error for {url}: {e}")
+        return jsonify({"status": "error", "message": f"Extraction failed: {str(e)}"}), 500
 
 
-# ---------- Static passthrough (if you need it) ----------
-@app.route("/static/<path:filename>")
-def static_files(filename):
-    return send_from_directory(app.static_folder, filename)
+# ✅ Endpoint: Navigate next/previous
+@app.route('/navigate', methods=['POST'])
+def navigate():
+    data = request.get_json()
+    direction = data.get('direction')
+    current_url = data.get('current_url')
+
+    if not is_valid_url(current_url):
+        return jsonify({"status": "error", "message": "Invalid current URL"}), 400
+
+    try:
+        nav_links = find_navigation_links(current_url)
+        new_url = nav_links.get(direction)
+
+        if new_url:
+            return jsonify({
+                "status": "success",
+                "new_url": new_url,
+                "chapter": direction
+            })
+        else:
+            return jsonify({"status": "error", "message": f"No {direction} link found"}), 404
+    except Exception as e:
+        logging.error(f"Navigation error: {e}")
+        return jsonify({"status": "error", "message": f"Navigation failed: {str(e)}"}), 500
 
 
-# Render.com uses $PORT
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "10000"))
-    app.run(host="0.0.0.0", port=port, debug=False)
+@app.route('/export')
+def export_text():
+    text_content = request.args.get('content', '')
+    filename = request.args.get('filename', 'extracted_text.txt')
+
+    response = make_response(text_content)
+    response.headers['Content-Type'] = 'text/plain'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    return response
+
+
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': time.time()})
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
