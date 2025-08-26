@@ -13,6 +13,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUrl = '';
     let history = JSON.parse(localStorage.getItem('scrapeHistory') || '[]');
 
+    // ✅ Debug overlay
+    const overlay = document.createElement('div');
+    overlay.style = `
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        background: rgba(0,0,0,0.85);
+        color: #0f0;
+        padding: 8px 12px;
+        font-size: 12px;
+        font-family: monospace;
+        z-index: 9999;
+        border-radius: 4px;
+        white-space: pre-line;
+    `;
+    overlay.innerText = 'JS loaded ✅';
+    document.body.appendChild(overlay);
+
+    if (scrapeBtn) {
+        overlay.innerText += '\nButton found ✅';
+        scrapeBtn.addEventListener('click', () => {
+            overlay.innerText += '\nExtract clicked ✅';
+        });
+    } else {
+        overlay.innerText += '\nButton not found ❌';
+    }
+
     function updateHistory(url) {
         if (!history.includes(url)) {
             history.push(url);
@@ -28,10 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
             });
+            overlay.innerText += `\nFetch status: ${response.status}`;
             const data = await response.json();
 
             if (data.error) {
                 contentDiv.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+                overlay.innerText += `\nError: ${data.error}`;
                 return;
             }
 
@@ -55,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
             nextBtn.onclick = () => next && scrape(next);
         } catch (err) {
             contentDiv.innerHTML = `<p style="color:red;">Error: ${err.message || err}</p>`;
+            overlay.innerText += `\nException: ${err.message || err}`;
         }
     }
 
@@ -62,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
         if (!url) {
             contentDiv.innerHTML = `<p style="color:red;">Please enter a valid URL.</p>`;
+            overlay.innerText += '\nInvalid URL ❌';
             return;
         }
         scrape(url);
