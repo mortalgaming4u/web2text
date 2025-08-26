@@ -1,48 +1,52 @@
 import trafilatura
 import logging
+import requests
+from bs4 import BeautifulSoup
 
-def get_website_text_content(url: str, force: bool = False) -> str:
-    """
-    Extracts main text content from a given URL using Trafilatura.
-    Falls back to html2txt if structured extraction fails or if force is True.
-
-    Parameters:
-    - url (str): The target webpage URL.
-    - force (bool): If True, skips structured extraction and uses raw text.
-
-    Returns:
-    - str: Extracted text content or empty string if extraction fails.
-    """
+def get_website_text_content(url: str) -> str:
+    """Extracts readable text from any website using Trafilatura first, then BeautifulSoup fallback."""
     try:
+        # Primary extractor: Trafilatura
         downloaded = trafilatura.fetch_url(url)
-        if not downloaded:
-            logging.warning(f"❌ Failed to download content from {url}")
-            return ""
+        if downloaded:
+            text = trafilatura.extract(downloaded, include_comments=False, include_tables=False)
+            if text:
+                logging.debug(f"Trafilatura extracted {len(text)} characters from {url}")
+                return text
 
-        if force:
-            fallback = trafilatura.html2txt(downloaded)
-            if fallback:
-                logging.info(f"⚠️ Forced fallback extract used for {url}")
-                return fallback
-            else:
-                logging.warning(f"⚠️ Forced fallback failed for {url}")
-                return ""
-
-        # Try structured extraction first
-        text = trafilatura.extract(downloaded)
-        if text:
-            logging.debug(f"✅ Structured extract: {len(text)} characters from {url}")
-            return text
-
-        # Fallback to raw text extraction
-        fallback = trafilatura.html2txt(downloaded)
-        if fallback:
-            logging.info(f"⚠️ Fallback extract used for {url}")
-            return fallback
-
-        logging.warning(f"❌ No extractable text found from {url}")
-        return ""
+        # Fallback extractor: BeautifulSoup
+        logging.warning(f"Trafilatura failed or returned empty for {url}, using fallback.")
+        soup = get_soup(url)
+        return fallback_extract(soup)
 
     except Exception as e:
-        logging.error(f"🔥 Error extracting content from {url}: {str(e)}")
-        return ""
+        logging.error(f"Error extracting content from {url}: {str(e)}")
+        return "Extraction error."
+
+def get_soup(url: str) -> BeautifulSoup:
+    """Fetches and parses HTML content into a BeautifulSoup object."""
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    response = requests.get(url, headers=headers, timeout=10)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, 'html.parser')
+
+def fallback_extract(soup: BeautifulSoup) -> str:
+    """Heuristic fallback for extracting readable content from HTML."""
+    candidates = soup.find_all(['article', 'main', 'section', 'div'])
+    scored = [
+        (len(tag.get_text(strip=True)), tag)
+        for tag in candidates
+        if len(tag.get_text(strip=True)) > 200
+    ]
+    if not scored:
+        return "No readable content found."
+
+    best_tag = max(scored, key=lambda x: x[0])[1]
+    return clean_text(best_tag)
+
+def clean_text(tag) -> str:
+    """Sanitizes extracted HTML content."""
+    for script in tag(['script', 'style', 'noscript']):
+        script.decompose()
+    text = tag.get_text(separator='\n', strip=True)
+    return '\n'.join(line for line in text.splitlines() if line.strip())
