@@ -1,0 +1,32 @@
+# WebTextExtract - Quick Start Guide
+
+## What's included in this package:
+- Complete Flask application with Copilot-inspired design
+- Smart webnovel content extraction with chapter navigation  
+- URL history and browser integration
+- Dark/light theme support
+- Mobile-responsive interface
+
+## Quick Deployment to Render:
+1. Upload this project to GitHub
+2. Connect GitHub to Render.com
+3. Create new Web Service
+4. Select this repository
+5. Deploy automatically (render.yaml included)
+
+## Local Development:
+1. Extract this ZIP file
+2. Install dependencies: pip install flask gunicorn trafilatura requests
+3. Set environment: export SESSION_SECRET=your-secret-key
+4. Run: python main.py
+5. Open: http://localhost:5000
+
+## Features:
+- Auto-detects chapter patterns (p1.html, ch1.html, etc.)
+- Previous/Next navigation with browser history
+- Copy content with one click  
+- URL history with domain previews
+- Word count and status indicators
+- Memory persistence with localStorage
+
+Enjoy your modern webnovel reading experience!
