@@ -1,127 +1,139 @@
+# app.py
 import os
-import logging
-from flask import Flask, render_template, request, jsonify, make_response
-from werkzeug.middleware.proxy_fix import ProxyFix
-from web_scraper import extract_text_and_metadata, find_navigation_links
-from urllib.parse import urlparse
 import time
+from flask import Flask, request, jsonify, render_template, send_from_directory
+from urllib.parse import urljoin
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+from web_scraper import (
+    fetch_html,
+    extract_text,
+    detect_nav_links,
+    detect_chapter_number_from_url_or_html,
+    infer_chapter_pattern,
+    guess_url_step,
+)
 
-# Create Flask app
-app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "your-secret-key-here")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-
-
-def is_valid_url(url):
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc])
-    except:
-        return False
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.config["JSON_SORT_KEYS"] = False
 
 
-@app.route('/')
+def _error(msg, code=400):
+    return jsonify({"status": "error", "message": msg}), code
+
+
+@app.route("/", methods=["GET"])
 def index():
-    return render_template('index.html')
+    # Serve templates/index.html if present, otherwise fallback to static index
+    try:
+        return render_template("index.html")
+    except Exception:
+        return send_from_directory("templates", "index.html")
 
 
-# ✅ Endpoint: Check lock / auto-detect pattern
-@app.route('/check-lock', methods=['POST'])
+@app.route("/check-lock", methods=["POST"])
 def check_lock():
-    data = request.get_json()
-    url = data.get('url')
-    pattern = data.get('pattern', '')
+    """
+    Body: { pattern: "", url: "..." }
+    Response: { status: "success", auto_detected: True, chapter_info: {...}, pattern: {...}, nav: {...} }
+    """
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return _error("Missing 'url' parameter.")
 
-    if not is_valid_url(url):
-        return jsonify({"status": "error", "message": "Invalid URL"}), 400
+    html, final_url = fetch_html(url, retries=2)
+    if html is None:
+        return _error("Failed to fetch URL (maybe blocked).", 502)
 
-    # Auto-detect chapters (dummy logic for now)
-    # Later we can detect by parsing HTML structure
-    auto_detected = True
+    nav = detect_nav_links(html, final_url)
+    chapter_num = detect_chapter_number_from_url_or_html(final_url, html)
+    pattern = infer_chapter_pattern(final_url, html)
+
     chapter_info = {
-        "current_chapter": 1,
-        "auto_detected": True
+        "current_chapter": chapter_num if chapter_num is not None else "Unknown",
+        "has_previous": bool(nav.get("previous")),
+        "has_next": bool(nav.get("next")),
+        "auto_detected": True,
     }
 
-    return jsonify({
-        "status": "success",
-        "message": "Pattern detected",
-        "auto_detected": auto_detected,
-        "chapter_info": chapter_info
-    })
+    return jsonify(
+        {
+            "status": "success",
+            "auto_detected": True,
+            "chapter_info": chapter_info,
+            "pattern": pattern,
+            "nav": nav,
+            "final_url": final_url,
+        }
+    )
 
 
-# ✅ Endpoint: Extract main content
-@app.route('/scrape', methods=['POST'])
+@app.route("/scrape", methods=["POST"])
 def scrape():
-    data = request.get_json()
-    url = data.get('url')
+    """
+    Body: { url: "..." }
+    Response: { status: "success", content: "...", final_url: "..." }
+    """
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return _error("Missing 'url' parameter.")
 
-    if not is_valid_url(url):
-        return jsonify({"status": "error", "message": "Invalid URL"}), 400
+    html, final_url = fetch_html(url, retries=2)
+    if html is None:
+        return _error("Failed to fetch URL (maybe blocked).", 502)
 
-    try:
-        result = extract_text_and_metadata(url)
-        if result.get("text"):
-            return jsonify({
-                "status": "success",
-                "content": result.get("text", ""),
-                "title": result.get("title", ""),
-                "meta_description": result.get("meta_description", "")
-            })
-        else:
-            return jsonify({"status": "error", "message": "No text content found"}), 404
-    except Exception as e:
-        logging.error(f"Scraping error for {url}: {e}")
-        return jsonify({"status": "error", "message": f"Extraction failed: {str(e)}"}), 500
+    text = extract_text(html, final_url)
+    if not text or not text.strip():
+        return _error("No textual content found", 422)
+
+    return jsonify({"status": "success", "content": text, "final_url": final_url})
 
 
-# ✅ Endpoint: Navigate next/previous
-@app.route('/navigate', methods=['POST'])
+@app.route("/navigate", methods=["POST"])
 def navigate():
-    data = request.get_json()
-    direction = data.get('direction')
-    current_url = data.get('current_url')
+    """
+    Body: { direction: "next"|'previous', current_url: "..." }
+    Response: { status: "success", new_url: "...", chapter: ... }
+    """
+    data = request.get_json(silent=True) or {}
+    direction = (data.get("direction") or "").strip().lower()
+    current_url = (data.get("current_url") or "").strip()
+    if direction not in {"next", "previous"}:
+        return _error("Invalid direction (use 'next' or 'previous').")
+    if not current_url:
+        return _error("Missing 'current_url' parameter.")
 
-    if not is_valid_url(current_url):
-        return jsonify({"status": "error", "message": "Invalid current URL"}), 400
+    html, final_url = fetch_html(current_url, retries=2)
+    if html is None:
+        return _error("Failed to fetch current URL for navigation.", 502)
 
-    try:
-        nav_links = find_navigation_links(current_url)
-        new_url = nav_links.get(direction)
+    nav = detect_nav_links(html, final_url)
+    candidate = nav.get(direction)
 
-        if new_url:
-            return jsonify({
-                "status": "success",
-                "new_url": new_url,
-                "chapter": direction
-            })
-        else:
-            return jsonify({"status": "error", "message": f"No {direction} link found"}), 404
-    except Exception as e:
-        logging.error(f"Navigation error: {e}")
-        return jsonify({"status": "error", "message": f"Navigation failed: {str(e)}"}), 500
+    # Fallback: numeric stepping in URL
+    if not candidate:
+        step = 1 if direction == "next" else -1
+        candidate = guess_url_step(final_url, step)
 
+    if not candidate:
+        return jsonify({"status": "error", "message": f"No {direction} link found."})
 
-@app.route('/export')
-def export_text():
-    text_content = request.args.get('content', '')
-    filename = request.args.get('filename', 'extracted_text.txt')
+    # Fetch and detect new chapter number (best-effort)
+    new_html, new_final = fetch_html(candidate, retries=1)
+    chapter = None
+    if new_html:
+        chapter = detect_chapter_number_from_url_or_html(new_final, new_html)
 
-    response = make_response(text_content)
-    response.headers['Content-Type'] = 'text/plain'
-    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-
-    return response
-
-
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy', 'timestamp': time.time()})
+    return jsonify({"status": "success", "new_url": candidate, "chapter": chapter or "Unknown"})
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+# Static files passthrough for Render
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory(app.static_folder, filename)
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False)
