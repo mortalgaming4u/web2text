@@ -29,18 +29,18 @@
   <!-- INPUT SECTION -->
   <section class="input-section">
     <div class="input-group">
-      <input type="text" id="urlInput" placeholder="Enter URL">
-      <button id="extractBtn" disabled>Extract</button>
+      <input type="text" id="urlInput" class="url-input" placeholder="Enter URL">
+      <button id="extractBtn" class="extract-btn" disabled>Extract</button>
     </div>
     <div class="input-group" style="margin-top: 10px;">
-      <button id="prevBtn" disabled>Prev</button>
-      <button id="nextBtn" disabled>Next</button>
-      <button id="copyBtn">Copy</button>
+      <button id="prevBtn" class="nav-btn" disabled>Prev</button>
+      <button id="nextBtn" class="nav-btn" disabled>Next</button>
+      <button id="copyBtn" class="nav-btn">Copy</button>
       <label style="display:flex;align-items:center;gap:4px;">
         <input type="checkbox" id="forceExtract"> Force Extract
       </label>
     </div>
-    <div id="statusIndicator" style="margin-top:8px;color:#555;"></div>
+    <div id="statusIndicator" style="margin-top:8px;"></div>
   </section>
 
   <!-- CONTENT DISPLAY -->
