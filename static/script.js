@@ -18,7 +18,9 @@ class WebTextExtractApp {
         console.log('WebTextExtract App initialized');
     }
 
-    // Initialize DOM elements
+    // -------------------------------
+    // DOM Elements
+    // -------------------------------
     initializeElements() {
         this.elements = {
             // Main elements
@@ -29,26 +31,26 @@ class WebTextExtractApp {
             copyBtn: document.getElementById('copyBtn'),
             themeToggle: document.getElementById('themeToggle'),
 
-            // Content elements
+            // Content
             contentBox: document.getElementById('contentBox'),
             extractedText: document.getElementById('extractedText'),
             chapterDisplay: document.getElementById('chapterDisplay'),
             statusIndicator: document.getElementById('statusIndicator'),
 
-            // Status bar elements
+            // Status bar
             extractStatus: document.getElementById('extractStatus'),
             copyStatus: document.getElementById('copyStatus'),
             wordCount: document.getElementById('wordCount'),
             wordCountText: document.getElementById('wordCountText'),
 
-            // Legacy compatibility elements
+            // Legacy support
             statusMsg: document.getElementById('statusMsg'),
             resultBox: document.getElementById('resultBox'),
             resultCount: document.getElementById('resultCount'),
             lockInput: document.getElementById('lockInput'),
             patternStatus: document.getElementById('patternStatus'),
 
-            // History elements
+            // History
             historySection: document.getElementById('historySection'),
             urlHistoryList: document.getElementById('urlHistoryList'),
             clearHistoryBtn: document.getElementById('clearHistoryBtn'),
@@ -58,55 +60,70 @@ class WebTextExtractApp {
         };
     }
 
-    // Bind event listeners
+    // -------------------------------
+    // Event Listeners
+    // -------------------------------
     bindEvents() {
         this.elements.urlInput.addEventListener('input', () => this.validateInput());
-
         this.elements.extractBtn.addEventListener('click', () => this.extractContent());
-
         this.elements.prevBtn.addEventListener('click', () => this.navigateChapter('previous'));
         this.elements.nextBtn.addEventListener('click', () => this.navigateChapter('next'));
-
         this.elements.copyBtn.addEventListener('click', () => this.copyContent());
         this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
 
+        // Enter key = extract
         this.elements.urlInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !this.elements.extractBtn.disabled) {
                 this.extractContent();
             }
         });
 
+        // Browser history navigation
         window.addEventListener('popstate', (e) => {
             if (e.state && e.state.url) {
                 this.elements.urlInput.value = e.state.url;
-                this.extractContent(true); // silent extraction
+                this.extractContent(true);
             }
         });
 
-        this.elements.clearHistoryBtn.addEventListener('click', () => this.clearUrlHistory());
+        // Clear history
+        this.elements.clearHistoryBtn.addEventListener('click', () => {
+            this.clearUrlHistory();
+        });
     }
 
-    // Validate input fields
+    // -------------------------------
+    // Input Validation
+    // -------------------------------
     validateInput() {
         const url = this.elements.urlInput.value.trim();
         const isValidUrl = url.length > 0;
+
         const shouldEnable = isValidUrl && !this.isLoading;
         this.elements.extractBtn.disabled = !shouldEnable;
+
+        console.log('Validation:', { url: !!url, loading: this.isLoading, enabled: shouldEnable });
     }
 
-    // Initialize from current URL (for browser history support)
+    // -------------------------------
+    // Initialize from URL
+    // -------------------------------
     initializeFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
+
         if (url && this.elements.urlInput.value === '') {
             this.elements.urlInput.value = decodeURIComponent(url);
             this.validateInput();
         }
     }
 
-    // Extract content from URL
+    // -------------------------------
+    // Extract Content (with Force Mode)
+    // -------------------------------
     async extractContent(silent = false) {
         const url = this.elements.urlInput.value.trim();
+
         if (!url) {
             this.updateStatus('Please enter a URL', 'error');
             return;
@@ -115,7 +132,9 @@ class WebTextExtractApp {
         this.setLoading(true);
 
         try {
-            // Save URL and update browser history
+            const forceMode = this.elements.forceExtract?.checked || false;
+
+            // Save URL + history state
             this.saveLastURL(url);
             if (!silent) {
                 const urlParams = new URLSearchParams();
@@ -124,68 +143,86 @@ class WebTextExtractApp {
                 window.history.pushState({ url }, '', newUrl);
             }
 
-            // First check pattern
-            const lockResponse = await this.makeRequest('/check-lock', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pattern: '', url })
-            });
-            const lockResult = await lockResponse.json();
+            let content = null;
 
-            if (lockResult.status !== 'success') {
-                this.updateStatus(lockResult.message || 'Unable to detect chapter pattern', 'error');
-                this.setLoading(false);
-                return;
+            if (forceMode) {
+                // 🚀 Force mode skips /check-lock
+                this.updateStatus("Force Extract enabled. Scraping directly...", "loading");
+
+                const response = await this.makeRequest('/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, force: true })
+                });
+
+                const result = await response.json();
+                if (result.status === 'success') {
+                    content = result.content;
+                    this.updateStatus('Content extracted successfully (force mode)!', 'success');
+                } else {
+                    this.updateStatus(result.message || 'Failed to extract content', 'error');
+                }
+
+            } else {
+                // 🟢 Normal mode calls /check-lock first
+                const lockResponse = await this.makeRequest('/check-lock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pattern: '', url })
+                });
+
+                const lockResult = await lockResponse.json();
+
+                if (lockResult.status !== 'success') {
+                    this.updateStatus(lockResult.message || 'Unable to detect chapter pattern', 'error');
+                    this.setLoading(false);
+                    return;
+                }
+
+                this.currentChapterInfo = lockResult.chapter_info;
+                this.addUrlToHistory(url);
+                this.updateChapterDisplay();
+                this.enableNavigation(true);
+
+                this.updateStatus(
+                    lockResult.auto_detected
+                        ? 'Auto-detected pattern, extracting...'
+                        : 'Pattern validated, extracting...',
+                    'loading'
+                );
+
+                const response = await this.makeRequest('/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, force: false })
+                });
+
+                const result = await response.json();
+                if (result.status === 'success') {
+                    content = result.content;
+                    this.updateStatus('Content extracted successfully!', 'success');
+                } else {
+                    this.updateStatus(result.message || 'Failed to extract content', 'error');
+                }
             }
 
-            this.currentChapterInfo = lockResult.chapter_info;
-            this.addUrlToHistory(url);
-            this.updateChapterDisplay();
-            this.enableNavigation(true);
-
-            const statusText = lockResult.auto_detected ?
-                'Auto-detected pattern, extracting...' :
-                'Pattern validated, extracting...';
-            this.updateStatus(statusText, 'loading');
-
-            // Extract content (with forceExtract support)
-            const response = await this.makeRequest('/scrape', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    url,
-                    force: this.elements.forceExtract?.checked || false
-                })
-            });
-            const result = await response.json();
-
-            // Handle special statuses
-            if (result.status === 'no_pattern') {
-                this.updateStatus("No chapter pattern detected. Try enabling Force Extract.", 'error');
-                this.setLoading(false);
-                return;
-            } else if (result.status === 'no_content') {
-                this.updateStatus("No extractable content found.", 'error');
-                this.setLoading(false);
-                return;
-            }
-
-            if (result.status === 'success') {
-                this.displayContent(result.content);
-                this.updateStatus('Content extracted successfully!', 'success');
+            // Show content if extracted
+            if (content) {
+                this.displayContent(content);
 
                 const contentEntry = {
                     url,
-                    content: result.content,
-                    title: `Chapter ${this.currentChapterInfo.current_chapter}`,
+                    content,
+                    title: this.currentChapterInfo
+                        ? `Chapter ${this.currentChapterInfo.current_chapter}`
+                        : "Extracted Page",
                     timestamp: new Date().toLocaleString(),
-                    chapter: this.currentChapterInfo.current_chapter
+                    chapter: this.currentChapterInfo?.current_chapter || null
                 };
                 this.scrapedContent.unshift(contentEntry);
                 this.saveToStorage('scrapedContent', this.scrapedContent);
-            } else {
-                this.updateStatus(result.message || 'Failed to extract content', 'error');
             }
+
         } catch (error) {
             console.error('Extraction error:', error);
             this.updateStatus('Network error. Please try again.', 'error');
@@ -194,109 +231,75 @@ class WebTextExtractApp {
         this.setLoading(false);
     }
 
-    // Navigate chapters
-    async navigateChapter(direction) {
-        if (!this.currentChapterInfo) return;
-        const newUrl = direction === 'next'
-            ? this.currentChapterInfo.next_url
-            : this.currentChapterInfo.prev_url;
-
-        if (!newUrl) {
-            this.updateStatus(`No ${direction} chapter available.`, 'error');
-            return;
-        }
-
-        this.elements.urlInput.value = newUrl;
-        this.extractContent();
+    // -------------------------------
+    // Helpers
+    // -------------------------------
+    setLoading(state) {
+        this.isLoading = state;
+        this.validateInput();
+        this.elements.extractBtn.textContent = state ? 'Loading...' : 'Extract';
     }
 
-    // Update chapter display
-    updateChapterDisplay() {
-        if (!this.currentChapterInfo) return;
-        this.elements.chapterDisplay.textContent =
-            `Chapter ${this.currentChapterInfo.current_chapter}`;
-    }
-
-    // Enable/disable navigation buttons
-    enableNavigation(enable) {
-        this.elements.prevBtn.disabled = !enable;
-        this.elements.nextBtn.disabled = !enable;
-    }
-
-    // Display extracted content
-    displayContent(content) {
-        this.elements.extractedText.value = content;
-        this.elements.wordCount.textContent = content.split(/\s+/).length;
-        this.elements.wordCountText.textContent = "Words";
-    }
-
-    // Copy content
-    async copyContent() {
-        try {
-            await navigator.clipboard.writeText(this.elements.extractedText.value);
-            this.updateStatus('Copied to clipboard!', 'success');
-        } catch (err) {
-            this.updateStatus('Copy failed', 'error');
-        }
-    }
-
-    // Set loading state
-    setLoading(isLoading) {
-        this.isLoading = isLoading;
-        this.elements.extractBtn.disabled = isLoading;
-        if (isLoading) {
-            this.elements.statusIndicator.classList.add('loading');
-        } else {
-            this.elements.statusIndicator.classList.remove('loading');
-        }
-    }
-
-    // Update status message
     updateStatus(message, type) {
-        this.elements.extractStatus.textContent = message;
-        this.elements.extractStatus.className = `status ${type}`;
+        this.elements.statusIndicator.textContent = message;
+        this.elements.statusIndicator.className = `status ${type}`;
     }
 
-    // Theme handling
-    initializeTheme() {
-        document.body.classList.toggle('dark', this.theme === 'dark');
+    displayContent(content) {
+        this.elements.extractedText.textContent = content;
+        this.elements.wordCountText.textContent = `${content.split(/\s+/).length} words`;
     }
 
-    toggleTheme() {
-        this.theme = this.theme === 'light' ? 'dark' : 'light';
-        this.saveToStorage('theme', this.theme);
-        this.initializeTheme();
+    saveLastURL(url) {
+        sessionStorage.setItem('lastURL', url);
     }
 
-    // History handling
+    loadLastURL() {
+        const lastURL = sessionStorage.getItem('lastURL');
+        if (lastURL) {
+            this.elements.urlInput.value = lastURL;
+            this.validateInput();
+        }
+    }
+
     addUrlToHistory(url) {
         if (!this.urlHistory.includes(url)) {
             this.urlHistory.unshift(url);
             this.saveToStorage('urlHistory', this.urlHistory);
-            this.updateHistoryUI();
         }
     }
 
     clearUrlHistory() {
         this.urlHistory = [];
         this.saveToStorage('urlHistory', this.urlHistory);
-        this.updateHistoryUI();
+        this.updateUI();
     }
 
-    updateHistoryUI() {
-        this.elements.urlHistoryList.innerHTML = '';
-        this.urlHistory.forEach(url => {
-            const li = document.createElement('li');
-            li.textContent = url;
-            li.addEventListener('click', () => {
-                this.elements.urlInput.value = url;
-                this.extractContent();
-            });
-            this.elements.urlHistoryList.appendChild(li);
+    updateChapterDisplay() {
+        if (this.currentChapterInfo) {
+            this.elements.chapterDisplay.textContent =
+                `Chapter ${this.currentChapterInfo.current_chapter}`;
+        }
+    }
+
+    enableNavigation(enabled) {
+        this.elements.prevBtn.disabled = !enabled;
+        this.elements.nextBtn.disabled = !enabled;
+    }
+
+    copyContent() {
+        const text = this.elements.extractedText.textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            this.updateStatus('Content copied to clipboard!', 'success');
         });
     }
 
-    // Storage
+    toggleTheme() {
+        this.theme = this.theme === 'light' ? 'dark' : 'light';
+        document.body.setAttribute('data-theme', this.theme);
+        this.saveToStorage('theme', this.theme);
+    }
+
     saveToStorage(key, value) {
         localStorage.setItem(key, JSON.stringify(value));
     }
@@ -309,31 +312,18 @@ class WebTextExtractApp {
         }
     }
 
-    saveLastURL(url) {
-        sessionStorage.setItem('lastURL', url);
-    }
-
-    loadLastURL() {
-        const url = sessionStorage.getItem('lastURL');
-        if (url) {
-            this.elements.urlInput.value = url;
-            this.validateInput();
-        }
-    }
-
-    // UI update
     updateUI() {
-        this.updateHistoryUI();
-        this.validateInput();
+        document.body.setAttribute('data-theme', this.theme);
     }
 
-    // Generic fetch wrapper
-    async makeRequest(endpoint, options) {
-        return fetch(endpoint, options);
+    async makeRequest(url, options) {
+        return fetch(url, options);
     }
 }
 
-// Initialize the application
+// -------------------------------
+// Init
+// -------------------------------
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new WebTextExtractApp();
 });
