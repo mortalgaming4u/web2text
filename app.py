@@ -47,14 +47,12 @@ def index():
         if not urls_input:
             flash('Please enter at least one URL', 'error')
         else:
-            # Split URLs by newlines and clean them
             urls = [url.strip() for url in urls_input.split('\n') if url.strip()]
             
             if not urls:
                 flash('Please enter valid URLs', 'error')
             else:
                 for url in urls:
-                    # Add protocol if missing
                     if not url.startswith(('http://', 'https://')):
                         url = 'https://' + url
                     
@@ -71,6 +69,7 @@ def index():
                         app.logger.info(f"Extracting text from: {url}")
                         result = extract_text_and_metadata(url)
                         raw_text = result.get("text", "")
+                        method_used = result.get("method", "unknown")
                         
                         if raw_text:
                             cleaned_text = clean_text(raw_text)
@@ -82,9 +81,9 @@ def index():
                                 'word_count': len(cleaned_text.split()) if cleaned_text else 0,
                                 'title': result.get("title", ""),
                                 'meta_description': result.get("meta_description", ""),
-                                'method': result.get("method", "")
+                                'method': method_used
                             })
-                            app.logger.info(f"Successfully extracted {len(cleaned_text)} characters from {url}")
+                            app.logger.info(f"[{method_used.upper()}] Successfully extracted {len(cleaned_text)} characters from {url}")
                         else:
                             results.append({
                                 'url': url,
@@ -92,6 +91,7 @@ def index():
                                 'error': 'No text content found on this page',
                                 'text': ''
                             })
+                            app.logger.warning(f"[{method_used.upper()}] No content found for {url}")
                             
                     except Exception as e:
                         app.logger.error(f"Error extracting from {url}: {str(e)}")
@@ -103,7 +103,6 @@ def index():
                         })
     
     return render_template('index.html', results=results, urls_input=urls_input)
-
 
 @app.route('/export')
 def export_text():
@@ -120,6 +119,11 @@ def export_text():
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     return response
+
+@app.route('/check-lock', methods=['POST'])
+def check_lock():
+    """Dummy route to prevent 404 errors from frontend JS polling"""
+    return jsonify({'status': 'ok'})
 
 @app.route('/health')
 def health_check():
