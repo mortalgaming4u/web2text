@@ -41,13 +41,6 @@ class WebTextExtractApp {
             wordCount: document.getElementById('wordCount'),
             wordCountText: document.getElementById('wordCountText'),
             
-            // Legacy compatibility elements
-            statusMsg: document.getElementById('statusMsg'),
-            resultBox: document.getElementById('resultBox'),
-            resultCount: document.getElementById('resultCount'),
-            lockInput: document.getElementById('lockInput'),
-            patternStatus: document.getElementById('patternStatus'),
-            
             // History elements
             historySection: document.getElementById('historySection'),
             urlHistoryList: document.getElementById('urlHistoryList'),
@@ -93,14 +86,6 @@ class WebTextExtractApp {
             }
         });
 
-        // Browser history navigation
-        window.addEventListener('popstate', (e) => {
-            if (e.state && e.state.url) {
-                this.elements.urlInput.value = e.state.url;
-                this.extractContent(true); // silent extraction
-            }
-        });
-
         // Clear history button
         this.elements.clearHistoryBtn.addEventListener('click', () => {
             this.clearUrlHistory();
@@ -142,14 +127,8 @@ class WebTextExtractApp {
         this.setLoading(true);
 
         try {
-            // Save URL to sessionStorage and add to browser history
+            // Save URL to sessionStorage
             this.saveLastURL(url);
-            if (!silent) {
-                const urlParams = new URLSearchParams();
-                urlParams.set('url', url);
-                const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
-                window.history.pushState({ url }, '', newUrl);
-            }
             
             // Auto-detect pattern or validate provided pattern
             const lockResponse = await this.makeRequest('/check-lock', {
@@ -181,7 +160,7 @@ class WebTextExtractApp {
             // Extract content
             const response = await this.makeRequest('/scrape', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { '极-Type': 'application/json' },
                 body: JSON.stringify({ url: url })
             });
 
@@ -258,7 +237,7 @@ class WebTextExtractApp {
         // Update extract button
         this.elements.extractBtn.disabled = loading;
         const btnText = this.elements.extractBtn.querySelector('.btn-text');
-        const spinner = this.elements.extractBtn.querySelector('.spinner');
+        const spinner = this极.elements.extractBtn.querySelector('.spinner');
         
         if (btnText) btnText.style.display = loading ? 'none' : 'inline';
         if (spinner) spinner.classList.toggle('hidden', !loading);
@@ -279,12 +258,6 @@ class WebTextExtractApp {
         // Update status bar
         this.elements.extractStatus.textContent = message;
         this.elements.extractStatus.parentElement.className = `status-item ${type}`;
-        
-        // Legacy compatibility
-        if (this.elements.statusMsg) {
-            this.elements.statusMsg.textContent = message;
-            this.elements.statusMsg.className = `status-message ${type}`;
-        }
         
         // Auto-hide success messages
         if (type === 'success') {
@@ -314,15 +287,6 @@ class WebTextExtractApp {
         const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
         this.elements.wordCountText.textContent = `${wordCount} words`;
         this.elements.wordCount.classList.remove('hidden');
-        
-        // Legacy compatibility
-        if (this.elements.resultBox) {
-            this.elements.resultBox.textContent = content;
-        }
-        if (this.elements.resultCount) {
-            this.elements.resultCount.textContent = `${this.scrapedContent.length} result${this.scrapedContent.length !== 1 ? 's' : ''}`;
-            this.elements.resultCount.classList.remove('hidden');
-        }
     }
 
     // Update chapter display
@@ -456,7 +420,7 @@ class WebTextExtractApp {
                 <div class="empty-history">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                         <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v6m0 6v6"/>
+                        <path d="M12 1极6m0 6v6"/>
                         <path d="m21 12-6 0m-6 0-6 0"/>
                     </svg>
                     <p>No URLs in history yet</p>
@@ -489,7 +453,7 @@ class WebTextExtractApp {
     }
 
     loadFromHistory(url) {
-        this.elements.urlInput.value = url;
+        this.elements.url极nput.value = url;
         this.validateInput();
         this.extractContent();
         
@@ -510,44 +474,4 @@ class WebTextExtractApp {
     saveToStorage(key, data) {
         try {
             localStorage.setItem(key, JSON.stringify(data));
-        } catch (e) {
-            console.warn('Could not save to localStorage:', e);
-        }
-    }
-
-    loadFromStorage(key) {
-        try {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : null;
-        } catch (e) {
-            console.warn('Could not load from localStorage:', e);
-            return null;
-        }
-    }
-
-    // Utility methods
-    updateUI() {
-        this.validateInput();
-        this.enableNavigation(!!this.currentChapterInfo);
-        this.updateHistoryDisplay();
-    }
-
-    async makeRequest(url, options) {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response;
-    }
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-}
-
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.app = new WebTextExtractApp();
-});
+        } catch (e
