@@ -2,10 +2,11 @@ import requests
 import trafilatura
 from bs4 import BeautifulSoup
 import logging
+import time
 
-MIN_TEXT_LENGTH = 200  # Minimum characters for valid extraction
+logging.basicConfig(level=logging.INFO)
 
-def extract_text_and_metadata(url):
+def extract_text_and_metadata(url, max_retries=3):
     headers = {
         'User-Agent': (
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
@@ -13,76 +14,74 @@ def extract_text_and_metadata(url):
             'Chrome/115.0.0.0 Safari/537.36'
         )
     }
-
-    # 1️⃣ Fetch page
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.encoding = resp.apparent_encoding
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        logging.error(f"Request failed for {url}: {e}")
-        return {"error": f"Failed to fetch the URL: {e}"}
-
-    # 2️⃣ Try Trafilatura extraction
-    downloaded = trafilatura.extract(html, include_comments=False, include_tables=False)
-    if downloaded and len(downloaded.strip()) > MIN_TEXT_LENGTH:
+    
+    # Retry mechanism for better reliability
+    for attempt in range(1, max_retries + 1):
+        try:
+            logging.info(f"[Attempt {attempt}] Fetching URL: {url}")
+            start_time = time.time()
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            html = resp.text
+            logging.info(f"Fetched {len(html)} characters from {url} in {round(time.time()-start_time, 2)}s")
+            break
+        except Exception as e:
+            logging.warning(f"Request attempt {attempt} failed: {e}")
+            if attempt == max_retries:
+                return {"error": f"Failed to fetch the URL after {max_retries} attempts: {e}"}
+            time.sleep(2)
+    
+    # === 1️⃣ Try Trafilatura first ===
+    extracted = trafilatura.extract(html, include_comments=False, include_tables=False)
+    if extracted and len(extracted.strip()) > 200:
+        logging.info(f"[Trafilatura] Successfully extracted text from {url}")
         soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.string.strip() if soup.title else ""
+        meta_desc = ""
+        desc_tag = soup.find("meta", attrs={"name": "description"})
+        if desc_tag and desc_tag.get("content"):
+            meta_desc = desc_tag["content"].strip()
         return {
-            "text": clean_text(downloaded),
-            "title": get_title(soup),
-            "meta_description": get_meta_description(soup),
+            "text": extracted,
+            "title": title,
+            "meta_description": meta_desc,
             "method": "trafilatura"
         }
-
-    # 3️⃣ Fallback heuristic with BeautifulSoup
+    
+    # === 2️⃣ Fallback: BeautifulSoup heuristics ===
+    logging.info(f"[Fallback] Using BeautifulSoup for {url}")
     soup = BeautifulSoup(html, "html.parser")
-
-    # Remove unnecessary tags
+    
+    # Remove unwanted tags
     for tag in soup(['script', 'style', 'noscript', 'header', 'footer', 'nav', 'aside', 'form', 'iframe']):
         tag.decompose()
-
-    title = get_title(soup)
-    meta_desc = get_meta_description(soup)
-
-    # Score content blocks
+    
+    title = soup.title.string.strip() if soup.title else ""
+    meta_desc = ""
+    desc_tag = soup.find("meta", attrs={"name": "description"})
+    if desc_tag and desc_tag.get("content"):
+        meta_desc = desc_tag["content"].strip()
+    
+    # Find best content blocks
     candidates = []
     for tag in soup.find_all(['article', 'main', 'section', 'div']):
         text = tag.get_text(separator=" ", strip=True)
         link_density = len(tag.find_all('a')) / (len(text.split()) + 1)
-        if len(text) > MIN_TEXT_LENGTH and link_density < 0.15:
-            score = len(text) + (len(tag.find_all('p')) * 50)  # bonus for paragraphs
-            candidates.append((score, text))
-
-    content = candidates[0][1] if candidates else soup.get_text(separator=" ", strip=True)
-    content = clean_text(content)
-
+        if len(text) > 200 and link_density < 0.15:
+            candidates.append((len(text), text))
+    
+    if candidates:
+        candidates.sort(reverse=True)
+        content = candidates[0][1]
+    else:
+        content = soup.get_text(separator=" ", strip=True)
+    
+    # Clean text
+    content = "\n".join([line.strip() for line in content.splitlines() if line.strip()])
+    
     return {
         "text": content,
         "title": title,
         "meta_description": meta_desc,
         "method": "fallback"
     }
-
-# ✅ Helper functions
-def get_title(soup):
-    return soup.title.string.strip() if soup.title else ""
-
-def get_meta_description(soup):
-    tag = soup.find("meta", attrs={"name": "description"}) or \
-          soup.find("meta", attrs={"property": "og:description"})
-    return tag["content"].strip() if tag and tag.get("content") else ""
-
-def clean_text(text):
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return "\n".join(lines)
-
-
-# ✅ Example usage
-if __name__ == "__main__":
-    url = "https://en.m.wikipedia.org/wiki/Wikipedia"
-    result = extract_text_and_metadata(url)
-    print("Method:", result.get("method"))
-    print("Title:", result.get("title"))
-    print("Meta Description:", result.get("meta_description"))
-    print("Extracted Text:\n", result.get("text")[:2000])  # first 2000 chars
