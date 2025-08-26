@@ -9,7 +9,7 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.8"
     healthCheckPath: /
     autoDeploy: true
     plan: free
