@@ -28,7 +28,6 @@ def clean_text(text):
     if not text:
         return ""
     
-    # Remove extra whitespace and normalize line breaks
     text = re.sub(r'\n\s*\n', '\n\n', text)
     text = re.sub(r'\s+', ' ', text)
     text = text.strip()
@@ -66,10 +65,14 @@ def index():
                         continue
                     
                     try:
+                        start_time = time.time()
                         app.logger.info(f"Extracting text from: {url}")
+                        
                         result = extract_text_and_metadata(url)
                         raw_text = result.get("text", "")
                         method_used = result.get("method", "unknown")
+                        
+                        elapsed_time = round(time.time() - start_time, 2)
                         
                         if raw_text:
                             cleaned_text = clean_text(raw_text)
@@ -83,7 +86,7 @@ def index():
                                 'meta_description': result.get("meta_description", ""),
                                 'method': method_used
                             })
-                            app.logger.info(f"[{method_used.upper()}] Successfully extracted {len(cleaned_text)} characters from {url}")
+                            app.logger.info(f"[{method_used.upper()}] Extracted {len(cleaned_text)} chars from {url} in {elapsed_time}s")
                         else:
                             results.append({
                                 'url': url,
@@ -91,7 +94,7 @@ def index():
                                 'error': 'No text content found on this page',
                                 'text': ''
                             })
-                            app.logger.warning(f"[{method_used.upper()}] No content found for {url}")
+                            app.logger.warning(f"[{method_used.upper()}] No content found for {url} (took {elapsed_time}s)")
                             
                     except Exception as e:
                         app.logger.error(f"Error extracting from {url}: {str(e)}")
@@ -116,19 +119,4 @@ def export_text():
     
     response = make_response(text_content)
     response.headers['Content-Type'] = 'text/plain'
-    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    
-    return response
-
-@app.route('/check-lock', methods=['POST'])
-def check_lock():
-    """Dummy route to prevent 404 errors from frontend JS polling"""
-    return jsonify({'status': 'ok'})
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'timestamp': time.time()})
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    response.headers['Content-Disposition']
