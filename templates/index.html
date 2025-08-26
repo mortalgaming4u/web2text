@@ -1,166 +1,110 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <title>Web Text Extractor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #f8f9fa;
-      color: #333;
-    }
-    body.dark {
-      background: #1e1e1e;
-      color: #eee;
-    }
-
-    header {
-      padding: 1rem;
-      background: #0077cc;
-      color: white;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    main {
-      padding: 1rem;
-      max-width: 900px;
-      margin: auto;
-    }
-
-    .input-section {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-
-    #urlInput {
-      padding: 0.5rem;
-      font-size: 1rem;
-      flex: 1;
-    }
-
-    button {
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      background: #0077cc;
-      color: white;
-    }
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-
-    .options {
-      margin-top: 0.5rem;
-      font-size: 0.9rem;
-    }
-
-    .status-bar {
-      margin-top: 1rem;
-      font-size: 0.9rem;
-    }
-
-    #contentBox {
-      margin-top: 1rem;
-      padding: 1rem;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      min-height: 200px;
-      white-space: pre-wrap;
-    }
-    body.dark #contentBox {
-      background: #2a2a2a;
-      border-color: #444;
-    }
-
-    .controls {
-      margin-top: 1rem;
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    #historySection {
-      margin-top: 2rem;
-    }
-    #urlHistoryList {
-      list-style: none;
-      padding: 0;
-    }
-    #urlHistoryList li {
-      font-size: 0.9rem;
-      margin: 0.3rem 0;
-    }
-  </style>
+  <title>Chapter Extractor</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <h1>Web Text Extractor</h1>
-    <button id="themeToggle">🌙 Toggle Theme</button>
-  </header>
 
-  <main>
-    <!-- Input Section -->
-    <div class="input-section">
-      <input type="text" id="urlInput" placeholder="Enter URL here..." />
-      <button id="extractBtn" disabled>Extract</button>
-
-      <div class="options">
-        <label>
-          <input type="checkbox" id="forceExtract" />
-          Force Extract (skip chapter detection)
-        </label>
+  <!-- Header -->
+  <header class="copilot-header">
+    <div class="header-container">
+      <div class="logo-section">
+        <img src="logo.png" alt="App Logo" class="copilot-logo-img">
+        <span class="brand-name">Chapter Extractor</span>
+      </div>
+      <div class="header-actions">
+        <button class="theme-toggle" id="themeToggle">🌙</button>
       </div>
     </div>
+  </header>
 
-    <!-- Controls -->
-    <div class="controls">
-      <button id="prevBtn" disabled>⬅ Previous</button>
-      <button id="nextBtn" disabled>Next ➡</button>
-      <button id="copyBtn">📋 Copy</button>
-    </div>
+  <!-- Hero Section -->
+  <section class="hero">
+    <h1>Extract Chapters Seamlessly</h1>
+    <p>Smart, clean, Copilot-inspired design for your reader tool.</p>
+  </section>
 
-    <!-- Status -->
-    <div class="status-bar">
-      <span id="chapterDisplay"></span> |
-      <span id="statusIndicator"></span> |
-      <span id="wordCountText">Words: <span id="wordCount">0</span></span>
-    </div>
+  <!-- Main Container -->
+  <main class="main-container">
 
-    <!-- Extracted Content -->
-    <div id="contentBox">
-      <div id="extractedText">No content yet.</div>
-    </div>
+    <!-- Input Section -->
+    <section class="input-section">
+      <div class="input-group">
+        <input type="text" id="urlInput" class="url-input" placeholder="Enter URL here...">
+        <button id="extractBtn" class="extract-btn">
+          <span>Extract</span>
+        </button>
+      </div>
+    </section>
 
-    <!-- History -->
-    <div id="historySection">
-      <h2>History</h2>
-      <ul id="urlHistoryList"></ul>
-      <button id="clearHistoryBtn">Clear History</button>
-    </div>
+    <!-- Navigation Section -->
+    <section class="navigation-section">
+      <button id="prevBtn" class="nav-btn" disabled>← Previous</button>
+      <div class="chapter-info">
+        <div id="chapterDisplay" class="chapter-display">Chapter ?</div>
+        <div class="status-indicator">Ready</div>
+      </div>
+      <button id="nextBtn" class="nav-btn" disabled>Next →</button>
+    </section>
 
-    <!-- Legacy hidden elements (for backward compat with your script.js) -->
-    <div style="display:none;">
-      <div id="statusMsg"></div>
-      <div id="resultBox"></div>
-      <div id="resultCount"></div>
-      <input type="text" id="lockInput" />
-      <div id="patternStatus"></div>
-      <div id="extractStatus"></div>
-      <div id="copyStatus"></div>
-    </div>
+    <!-- Content Section -->
+    <section class="content-section">
+      <div class="content-header">
+        <button id="copyBtn" class="copy-btn">Copy</button>
+      </div>
+      <div id="contentBox" class="content-box">
+        <div class="empty-state">
+          <svg width="48" height="48" fill="currentColor">
+            <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+          <h3>No Content Yet</h3>
+          <p>Enter a URL and extract chapter text here.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- History Section -->
+    <section class="history-section">
+      <div class="section-header">
+        <h3>History</h3>
+        <button id="clearHistory" class="clear-btn">Clear</button>
+      </div>
+      <div id="historyList" class="history-list">
+        <div class="empty-history">
+          <svg width="40" height="40" fill="currentColor">
+            <circle cx="20" cy="20" r="18" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+          <p>No history yet</p>
+          <span>Extract something to see it here.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Info Section -->
+    <section class="info-section">
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="card-icon">📖</div>
+          <h4>Seamless Extraction</h4>
+          <p>Quickly fetch and display chapters with clean formatting.</p>
+        </div>
+        <div class="info-card">
+          <div class="card-icon">🌙</div>
+          <h4>Dark Mode</h4>
+          <p>Toggle between light and dark for a comfortable reading experience.</p>
+        </div>
+        <div class="info-card">
+          <div class="card-icon">⚡</div>
+          <h4>Fast Navigation</h4>
+          <p>Switch between chapters without losing your place.</p>
+        </div>
+      </div>
+    </section>
+
   </main>
 
-  <script src="static/script.js"></script>
 </body>
 </html>
