@@ -14,7 +14,7 @@ class WebTextExtractApp {
         this.loadLastURL();
         this.initializeFromURL();
         this.updateUI();
-        
+
         console.log('WebTextExtract App initialized');
     }
 
@@ -28,72 +28,54 @@ class WebTextExtractApp {
             nextBtn: document.getElementById('nextBtn'),
             copyBtn: document.getElementById('copyBtn'),
             themeToggle: document.getElementById('themeToggle'),
-            
+
             // Content elements
             contentBox: document.getElementById('contentBox'),
             extractedText: document.getElementById('extractedText'),
             chapterDisplay: document.getElementById('chapterDisplay'),
             statusIndicator: document.getElementById('statusIndicator'),
-            
+
             // Status bar elements
             extractStatus: document.getElementById('extractStatus'),
             copyStatus: document.getElementById('copyStatus'),
             wordCount: document.getElementById('wordCount'),
             wordCountText: document.getElementById('wordCountText'),
-            
+
             // Legacy compatibility elements
             statusMsg: document.getElementById('statusMsg'),
             resultBox: document.getElementById('resultBox'),
             resultCount: document.getElementById('resultCount'),
             lockInput: document.getElementById('lockInput'),
             patternStatus: document.getElementById('patternStatus'),
-            
+
             // History elements
             historySection: document.getElementById('historySection'),
             urlHistoryList: document.getElementById('urlHistoryList'),
-            clearHistoryBtn: document.getElementById('clearHistoryBtn')
+            clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+
+            // New: Force Extract
+            forceExtract: document.getElementById('forceExtract')
         };
     }
 
     // Bind event listeners
     bindEvents() {
-        // URL input validation
-        this.elements.urlInput.addEventListener('input', () => {
-            this.validateInput();
-        });
+        this.elements.urlInput.addEventListener('input', () => this.validateInput());
 
-        // Extract button
-        this.elements.extractBtn.addEventListener('click', () => {
-            this.extractContent();
-        });
+        this.elements.extractBtn.addEventListener('click', () => this.extractContent());
 
-        // Navigation buttons
-        this.elements.prevBtn.addEventListener('click', () => {
-            this.navigateChapter('previous');
-        });
+        this.elements.prevBtn.addEventListener('click', () => this.navigateChapter('previous'));
+        this.elements.nextBtn.addEventListener('click', () => this.navigateChapter('next'));
 
-        this.elements.nextBtn.addEventListener('click', () => {
-            this.navigateChapter('next');
-        });
+        this.elements.copyBtn.addEventListener('click', () => this.copyContent());
+        this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
 
-        // Copy button
-        this.elements.copyBtn.addEventListener('click', () => {
-            this.copyContent();
-        });
-
-        // Theme toggle
-        this.elements.themeToggle.addEventListener('click', () => {
-            this.toggleTheme();
-        });
-
-        // URL input enter key
         this.elements.urlInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !this.elements.extractBtn.disabled) {
                 this.extractContent();
             }
         });
 
-        // Browser history navigation
         window.addEventListener('popstate', (e) => {
             if (e.state && e.state.url) {
                 this.elements.urlInput.value = e.state.url;
@@ -101,28 +83,21 @@ class WebTextExtractApp {
             }
         });
 
-        // Clear history button
-        this.elements.clearHistoryBtn.addEventListener('click', () => {
-            this.clearUrlHistory();
-        });
+        this.elements.clearHistoryBtn.addEventListener('click', () => this.clearUrlHistory());
     }
 
     // Validate input fields
     validateInput() {
         const url = this.elements.urlInput.value.trim();
         const isValidUrl = url.length > 0;
-        
         const shouldEnable = isValidUrl && !this.isLoading;
         this.elements.extractBtn.disabled = !shouldEnable;
-        
-        console.log('Validation:', { url: !!url, loading: this.isLoading, enabled: shouldEnable });
     }
 
     // Initialize from current URL (for browser history support)
     initializeFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
         const url = urlParams.get('url');
-        
         if (url && this.elements.urlInput.value === '') {
             this.elements.urlInput.value = decodeURIComponent(url);
             this.validateInput();
@@ -132,8 +107,6 @@ class WebTextExtractApp {
     // Extract content from URL
     async extractContent(silent = false) {
         const url = this.elements.urlInput.value.trim();
-        const lockPattern = ''; // Auto-detection mode
-
         if (!url) {
             this.updateStatus('Please enter a URL', 'error');
             return;
@@ -142,7 +115,7 @@ class WebTextExtractApp {
         this.setLoading(true);
 
         try {
-            // Save URL to sessionStorage and add to browser history
+            // Save URL and update browser history
             this.saveLastURL(url);
             if (!silent) {
                 const urlParams = new URLSearchParams();
@@ -150,14 +123,13 @@ class WebTextExtractApp {
                 const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
                 window.history.pushState({ url }, '', newUrl);
             }
-            
-            // Auto-detect pattern or validate provided pattern
+
+            // First check pattern
             const lockResponse = await this.makeRequest('/check-lock', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pattern: lockPattern, url: url })
+                body: JSON.stringify({ pattern: '', url })
             });
-
             const lockResult = await lockResponse.json();
 
             if (lockResult.status !== 'success') {
@@ -166,34 +138,44 @@ class WebTextExtractApp {
                 return;
             }
 
-            // Store chapter info and pattern
             this.currentChapterInfo = lockResult.chapter_info;
             this.addUrlToHistory(url);
             this.updateChapterDisplay();
             this.enableNavigation(true);
 
-            // Update status
-            const statusText = lockResult.auto_detected ? 
-                'Auto-detected pattern, extracting...' : 
+            const statusText = lockResult.auto_detected ?
+                'Auto-detected pattern, extracting...' :
                 'Pattern validated, extracting...';
             this.updateStatus(statusText, 'loading');
 
-            // Extract content
+            // Extract content (with forceExtract support)
             const response = await this.makeRequest('/scrape', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
+                body: JSON.stringify({
+                    url,
+                    force: this.elements.forceExtract?.checked || false
+                })
             });
-
             const result = await response.json();
+
+            // Handle special statuses
+            if (result.status === 'no_pattern') {
+                this.updateStatus("No chapter pattern detected. Try enabling Force Extract.", 'error');
+                this.setLoading(false);
+                return;
+            } else if (result.status === 'no_content') {
+                this.updateStatus("No extractable content found.", 'error');
+                this.setLoading(false);
+                return;
+            }
 
             if (result.status === 'success') {
                 this.displayContent(result.content);
                 this.updateStatus('Content extracted successfully!', 'success');
-                
-                // Add to scraped content history
+
                 const contentEntry = {
-                    url: url,
+                    url,
                     content: result.content,
                     title: `Chapter ${this.currentChapterInfo.current_chapter}`,
                     timestamp: new Date().toLocaleString(),
@@ -204,7 +186,6 @@ class WebTextExtractApp {
             } else {
                 this.updateStatus(result.message || 'Failed to extract content', 'error');
             }
-
         } catch (error) {
             console.error('Extraction error:', error);
             this.updateStatus('Network error. Please try again.', 'error');
@@ -213,341 +194,146 @@ class WebTextExtractApp {
         this.setLoading(false);
     }
 
-    // Navigate through chapters
+    // Navigate chapters
     async navigateChapter(direction) {
-        if (!this.currentChapterInfo || this.isLoading) return;
+        if (!this.currentChapterInfo) return;
+        const newUrl = direction === 'next'
+            ? this.currentChapterInfo.next_url
+            : this.currentChapterInfo.prev_url;
 
-        this.setLoading(true);
-        this.updateStatus(`Navigating to ${direction} chapter...`, 'loading');
-
-        try {
-            const response = await this.makeRequest('/navigate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    direction: direction,
-                    current_url: this.elements.urlInput.value
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                // Update URL and chapter info
-                this.elements.urlInput.value = result.new_url;
-                this.currentChapterInfo.current_chapter = result.chapter;
-                this.updateChapterDisplay();
-                
-                // Auto-extract the new chapter
-                await this.extractContent(true); // Silent extraction
-            } else {
-                this.updateStatus(result.message || `Cannot navigate ${direction}`, 'error');
-            }
-        } catch (error) {
-            console.error('Navigation error:', error);
-            this.updateStatus('Navigation failed. Please try again.', 'error');
+        if (!newUrl) {
+            this.updateStatus(`No ${direction} chapter available.`, 'error');
+            return;
         }
 
-        this.setLoading(false);
-    }
-
-    // Set loading state
-    setLoading(loading) {
-        this.isLoading = loading;
-        
-        // Update extract button
-        this.elements.extractBtn.disabled = loading;
-        const btnText = this.elements.extractBtn.querySelector('.btn-text');
-        const spinner = this.elements.extractBtn.querySelector('.spinner');
-        
-        if (btnText) btnText.style.display = loading ? 'none' : 'inline';
-        if (spinner) spinner.classList.toggle('hidden', !loading);
-        
-        // Update navigation buttons
-        this.elements.prevBtn.disabled = loading || !this.currentChapterInfo;
-        this.elements.nextBtn.disabled = loading || !this.currentChapterInfo;
-        
-        this.validateInput();
-    }
-
-    // Update status messages
-    updateStatus(message, type) {
-        // Update main status indicator
-        this.elements.statusIndicator.textContent = message;
-        this.elements.statusIndicator.className = `status-indicator ${type}`;
-        
-        // Update status bar
-        this.elements.extractStatus.textContent = message;
-        this.elements.extractStatus.parentElement.className = `status-item ${type}`;
-        
-        // Legacy compatibility
-        if (this.elements.statusMsg) {
-            this.elements.statusMsg.textContent = message;
-            this.elements.statusMsg.className = `status-message ${type}`;
-        }
-        
-        // Auto-hide success messages
-        if (type === 'success') {
-            setTimeout(() => {
-                this.elements.statusIndicator.textContent = 'Ready';
-                this.elements.statusIndicator.className = 'status-indicator';
-                this.elements.extractStatus.textContent = 'Ready';
-                this.elements.extractStatus.parentElement.className = 'status-item';
-            }, 3000);
-        }
-    }
-
-    // Display extracted content
-    displayContent(content) {
-        // Hide empty state
-        const emptyState = this.elements.contentBox.querySelector('.empty-state');
-        if (emptyState) {
-            emptyState.style.display = 'none';
-        }
-        
-        // Show extracted text and copy button
-        this.elements.extractedText.textContent = content;
-        this.elements.extractedText.classList.remove('hidden');
-        this.elements.copyBtn.classList.remove('hidden');
-        
-        // Update word count
-        const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
-        this.elements.wordCountText.textContent = `${wordCount} words`;
-        this.elements.wordCount.classList.remove('hidden');
-        
-        // Legacy compatibility
-        if (this.elements.resultBox) {
-            this.elements.resultBox.textContent = content;
-        }
-        if (this.elements.resultCount) {
-            this.elements.resultCount.textContent = `${this.scrapedContent.length} result${this.scrapedContent.length !== 1 ? 's' : ''}`;
-            this.elements.resultCount.classList.remove('hidden');
-        }
+        this.elements.urlInput.value = newUrl;
+        this.extractContent();
     }
 
     // Update chapter display
     updateChapterDisplay() {
-        if (this.currentChapterInfo && this.elements.chapterDisplay) {
-            this.elements.chapterDisplay.textContent = `Chapter ${this.currentChapterInfo.current_chapter}`;
-            this.elements.chapterDisplay.classList.remove('hidden');
-            
-            // Update status indicator
-            const statusText = this.currentChapterInfo.auto_detected ? 'Auto-detected' : 'Pattern validated';
-            this.elements.statusIndicator.textContent = statusText;
-        }
+        if (!this.currentChapterInfo) return;
+        this.elements.chapterDisplay.textContent =
+            `Chapter ${this.currentChapterInfo.current_chapter}`;
     }
 
-    // Enable/disable navigation
+    // Enable/disable navigation buttons
     enableNavigation(enable) {
-        this.elements.prevBtn.disabled = !enable || this.isLoading;
-        this.elements.nextBtn.disabled = !enable || this.isLoading;
+        this.elements.prevBtn.disabled = !enable;
+        this.elements.nextBtn.disabled = !enable;
     }
 
-    // Copy content to clipboard
-    copyContent() {
-        const content = this.elements.extractedText.textContent;
+    // Display extracted content
+    displayContent(content) {
+        this.elements.extractedText.value = content;
+        this.elements.wordCount.textContent = content.split(/\s+/).length;
+        this.elements.wordCountText.textContent = "Words";
+    }
 
-        if (!content || content.trim() === '') {
-            this.updateStatus('No content to copy', 'error');
-            return;
+    // Copy content
+    async copyContent() {
+        try {
+            await navigator.clipboard.writeText(this.elements.extractedText.value);
+            this.updateStatus('Copied to clipboard!', 'success');
+        } catch (err) {
+            this.updateStatus('Copy failed', 'error');
         }
-
-        navigator.clipboard.writeText(content).then(() => {
-            // Visual feedback
-            this.elements.copyBtn.classList.add('copied');
-            this.elements.copyStatus.classList.remove('hidden');
-            this.updateStatus('Content copied to clipboard!', 'success');
-            
-            // Reset after 2 seconds
-            setTimeout(() => {
-                this.elements.copyBtn.classList.remove('copied');
-                this.elements.copyStatus.classList.add('hidden');
-            }, 2000);
-        }).catch(() => {
-            // Fallback for older browsers
-            const textArea = document.createElement('textarea');
-            textArea.value = content;
-            document.body.appendChild(textArea);
-            textArea.select();
-            
-            try {
-                document.execCommand('copy');
-                this.updateStatus('Content copied to clipboard!', 'success');
-                this.elements.copyBtn.classList.add('copied');
-                this.elements.copyStatus.classList.remove('hidden');
-                setTimeout(() => {
-                    this.elements.copyBtn.classList.remove('copied');
-                    this.elements.copyStatus.classList.add('hidden');
-                }, 2000);
-            } catch (err) {
-                this.updateStatus('Failed to copy content', 'error');
-            }
-            
-            document.body.removeChild(textArea);
-        });
     }
 
-    // Theme management
+    // Set loading state
+    setLoading(isLoading) {
+        this.isLoading = isLoading;
+        this.elements.extractBtn.disabled = isLoading;
+        if (isLoading) {
+            this.elements.statusIndicator.classList.add('loading');
+        } else {
+            this.elements.statusIndicator.classList.remove('loading');
+        }
+    }
+
+    // Update status message
+    updateStatus(message, type) {
+        this.elements.extractStatus.textContent = message;
+        this.elements.extractStatus.className = `status ${type}`;
+    }
+
+    // Theme handling
     initializeTheme() {
-        document.documentElement.setAttribute('data-theme', this.theme);
-        this.updateThemeToggle();
+        document.body.classList.toggle('dark', this.theme === 'dark');
     }
 
     toggleTheme() {
         this.theme = this.theme === 'light' ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-theme', this.theme);
         this.saveToStorage('theme', this.theme);
-        this.updateThemeToggle();
+        this.initializeTheme();
     }
 
-    updateThemeToggle() {
-        const sunIcon = this.elements.themeToggle.querySelector('.sun-icon');
-        const moonIcon = this.elements.themeToggle.querySelector('.moon-icon');
-        
-        if (this.theme === 'dark') {
-            sunIcon?.classList.add('hidden');
-            moonIcon?.classList.remove('hidden');
-        } else {
-            sunIcon?.classList.remove('hidden');
-            moonIcon?.classList.add('hidden');
-        }
-    }
-
-    // URL and history management
-    loadLastURL() {
-        const lastURL = sessionStorage.getItem('lastWebnovelURL');
-        if (lastURL && this.elements.urlInput.value === '') {
-            this.elements.urlInput.value = lastURL;
-            this.validateInput();
-        }
-    }
-
-    saveLastURL(url) {
-        sessionStorage.setItem('lastWebnovelURL', url);
-    }
-
+    // History handling
     addUrlToHistory(url) {
-        const domain = new URL(url).hostname;
-        const urlEntry = {
-            url: url,
-            domain: domain,
-            timestamp: new Date().toLocaleString(),
-            chapter: this.currentChapterInfo?.current_chapter || 'Unknown'
-        };
-
-        // Remove existing entry for same URL
-        this.urlHistory = this.urlHistory.filter(entry => entry.url !== url);
-        
-        // Add to beginning
-        this.urlHistory.unshift(urlEntry);
-        
-        // Keep only last 10 URLs
-        this.urlHistory = this.urlHistory.slice(0, 10);
-        
-        this.saveToStorage('urlHistory', this.urlHistory);
-        this.updateHistoryDisplay();
-    }
-
-    updateHistoryDisplay() {
-        if (!this.elements.urlHistoryList) return;
-
-        if (this.urlHistory.length === 0) {
-            this.elements.urlHistoryList.innerHTML = `
-                <div class="empty-history">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v6m0 6v6"/>
-                        <path d="m21 12-6 0m-6 0-6 0"/>
-                    </svg>
-                    <p>No URLs in history yet</p>
-                    <span>Extracted URLs will appear here</span>
-                </div>
-            `;
-            return;
+        if (!this.urlHistory.includes(url)) {
+            this.urlHistory.unshift(url);
+            this.saveToStorage('urlHistory', this.urlHistory);
+            this.updateHistoryUI();
         }
-
-        const historyHTML = this.urlHistory.map(entry => `
-            <div class="history-item" onclick="app.loadFromHistory('${entry.url}')" title="${entry.url}">
-                <div class="history-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14,2 14,8 20,8"/>
-                    </svg>
-                </div>
-                <div class="history-content">
-                    <div class="history-title">${this.escapeHtml(entry.url)}</div>
-                    <div class="history-meta">
-                        <span class="history-domain">${this.escapeHtml(entry.domain)}</span>
-                        <span>Chapter ${entry.chapter}</span>
-                        <span>${entry.timestamp}</span>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-
-        this.elements.urlHistoryList.innerHTML = historyHTML;
-    }
-
-    loadFromHistory(url) {
-        this.elements.urlInput.value = url;
-        this.validateInput();
-        this.extractContent();
-        
-        // Scroll to top
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     clearUrlHistory() {
-        if (confirm('Are you sure you want to clear URL history?')) {
-            this.urlHistory = [];
-            this.saveToStorage('urlHistory', this.urlHistory);
-            this.updateHistoryDisplay();
-            this.updateStatus('URL history cleared', 'success');
-        }
+        this.urlHistory = [];
+        this.saveToStorage('urlHistory', this.urlHistory);
+        this.updateHistoryUI();
     }
 
-    // Storage utilities
-    saveToStorage(key, data) {
-        try {
-            localStorage.setItem(key, JSON.stringify(data));
-        } catch (e) {
-            console.warn('Could not save to localStorage:', e);
-        }
+    updateHistoryUI() {
+        this.elements.urlHistoryList.innerHTML = '';
+        this.urlHistory.forEach(url => {
+            const li = document.createElement('li');
+            li.textContent = url;
+            li.addEventListener('click', () => {
+                this.elements.urlInput.value = url;
+                this.extractContent();
+            });
+            this.elements.urlHistoryList.appendChild(li);
+        });
+    }
+
+    // Storage
+    saveToStorage(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
     }
 
     loadFromStorage(key) {
         try {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : null;
-        } catch (e) {
-            console.warn('Could not load from localStorage:', e);
+            return JSON.parse(localStorage.getItem(key));
+        } catch {
             return null;
         }
     }
 
-    // Utility methods
-    updateUI() {
-        this.validateInput();
-        this.enableNavigation(!!this.currentChapterInfo);
-        this.updateHistoryDisplay();
+    saveLastURL(url) {
+        sessionStorage.setItem('lastURL', url);
     }
 
-    async makeRequest(url, options) {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    loadLastURL() {
+        const url = sessionStorage.getItem('lastURL');
+        if (url) {
+            this.elements.urlInput.value = url;
+            this.validateInput();
         }
-        return response;
     }
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    // UI update
+    updateUI() {
+        this.updateHistoryUI();
+        this.validateInput();
+    }
+
+    // Generic fetch wrapper
+    async makeRequest(endpoint, options) {
+        return fetch(endpoint, options);
     }
 }
 
-// Initialize the application when DOM is loaded
+// Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new WebTextExtractApp();
 });
