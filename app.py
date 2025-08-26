@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, make_response
 from werkzeug.middleware.proxy_fix import ProxyFix
-from web_scraper import extract_text_and_metadata, fetch_html, detect_chapter_links
+from web_scraper.core import extract_text_and_metadata, fetch_html, detect_chapter_links
 import re
 from urllib.parse import urlparse
 import time
