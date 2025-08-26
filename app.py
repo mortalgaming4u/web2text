@@ -1,36 +1,70 @@
-from flask import Flask, request, jsonify
-from web_scraper import extract_text_and_metadata, detect_chapter_info, generate_next_prev_url
+import os
+import logging
+from flask import Flask, render_template, request, flash, redirect, url_for, jsonify, make_response
+from werkzeug.middleware.proxy_fix import ProxyFix
+from web_scraper import extract_text_and_metadata, fetch_html, detect_chapter_links
+import re
+from urllib.parse import urlparse
+import time
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", "your-secret-key")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+def is_valid_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except:
+        return False
+
+def clean_text(text):
+    if not text:
+        return ""
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/scrape', methods=['POST'])
 def scrape():
     data = request.json
-    url = data.get('url')
+    url = data.get("url")
     if not url:
-        return jsonify({"status": "error", "message": "URL is required"}), 400
+        return jsonify({"error": "URL is required"}), 400
 
-    result = extract_text_and_metadata(url)
-    chapter = detect_chapter_info(url)
-    return jsonify({
-        "status": "success",
-        "content": result.get("text", ""),
-        "chapter_info": {"current_chapter": chapter} if chapter else None
-    })
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
 
-@app.route('/navigate', methods=['POST'])
-def navigate():
-    data = request.json
-    direction = data.get('direction')
-    current_url = data.get('current_url')
-    chapter = detect_chapter_info(current_url)
+    if not is_valid_url(url):
+        return jsonify({"error": "Invalid URL"}), 400
 
-    if not current_url or not direction or chapter is None:
-        return jsonify({"status": "error", "message": "Cannot navigate"}), 400
+    try:
+        html = fetch_html(url)
+        result = extract_text_and_metadata(url)
+        text = clean_text(result.get("text", ""))
 
-    new_url = generate_next_prev_url(current_url, chapter, direction)
-    return jsonify({"status": "success", "new_url": new_url, "chapter": chapter + (1 if direction == "next" else -1)})
+        chapter_links = detect_chapter_links(url, html)
+
+        return jsonify({
+            "success": True,
+            "url": url,
+            "title": result.get("title", ""),
+            "meta_description": result.get("meta_description", ""),
+            "text": text,
+            "word_count": len(text.split()),
+            "method": result.get("method", ""),
+            "navigation": chapter_links
+        })
+    except Exception as e:
+        logging.error(f"Scraping error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "healthy"})
+    return jsonify({"status": "healthy", "timestamp": time.time()})
