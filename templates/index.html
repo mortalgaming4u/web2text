@@ -1,127 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Copilot Scraper</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Text Extractor</title>
+<link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <!-- Copilot-style header -->
-  <header class="copilot-header">
-    <div class="header-container">
-      <div class="logo-section">
-        <div class="copilot-logo">
-          <!-- SVG Logo (replace with your own if you want) -->
-          <svg width="20" height="20" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-            <path d="M2 17l10 5 10-5"></path>
-            <path d="M2 12l10 5 10-5"></path>
-          </svg>
-        </div>
-      </div>
-      <div class="brand-section">
-        <span class="brand-name">Copilot Scraper</span>
-      </div>
-      <div class="header-actions">
-        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-          🌙
-        </button>
-      </div>
+<body data-theme="light">
+
+<!-- ================== HEADER ================== -->
+<header class="copilot-header">
+  <div class="header-container">
+    <div class="logo-section">
+      <div class="copilot-logo">🅲</div>
     </div>
-  </header>
+    <div class="brand-section">
+      <div class="brand-name">WebTextExtract</div>
+    </div>
+    <div class="header-actions">
+      <button id="themeToggle" class="theme-toggle">🌓</button>
+    </div>
+  </div>
+</header>
 
-  <!-- Main container -->
-  <main class="main-container">
-    <!-- Input Section -->
-    <section class="input-section">
-      <div class="input-group">
-        <input type="text" id="urlInput" class="url-input" placeholder="Enter a URL to scrape..." />
-        <button id="extractBtn" class="extract-btn">
-          <span>Extract</span>
-          <span class="spinner hidden" id="loadingSpinner">
-            <span class="spinner-circle"></span>
-          </span>
-        </button>
-      </div>
-    </section>
+<!-- ================== MAIN CONTAINER ================== -->
+<main class="main-container">
 
-    <!-- Navigation Section -->
-    <section class="navigation-section">
-      <button id="prevBtn" class="nav-btn">⬅ Prev</button>
-      <div class="chapter-info">
-        <span class="chapter-display" id="chapterDisplay">No Chapter</span>
-        <span class="status-indicator" id="statusIndicator">Idle</span>
-      </div>
-      <button id="nextBtn" class="nav-btn">Next ➡</button>
-    </section>
+  <!-- INPUT SECTION -->
+  <section class="input-section">
+    <div class="input-group">
+      <input type="text" id="urlInput" placeholder="Enter URL">
+      <button id="extractBtn" disabled>Extract</button>
+    </div>
+    <div class="input-group" style="margin-top: 10px;">
+      <button id="prevBtn" disabled>Prev</button>
+      <button id="nextBtn" disabled>Next</button>
+      <button id="copyBtn">Copy</button>
+      <label style="display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" id="forceExtract"> Force Extract
+      </label>
+    </div>
+    <div id="statusIndicator" style="margin-top:8px;color:#555;"></div>
+  </section>
 
-    <!-- Content Section -->
-    <section class="content-section">
-      <div class="content-header">
-        <button id="copyBtn" class="copy-btn">Copy</button>
-      </div>
-      <div class="content-box" id="contentBox">
-        <div class="empty-state">
-          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M12 4v16m8-8H4"></path>
-          </svg>
-          <h3>No content yet</h3>
-          <p>Enter a URL and click extract to see the magic ✨</p>
-        </div>
-      </div>
-    </section>
+  <!-- CONTENT DISPLAY -->
+  <section class="content-section" id="contentBox">
+    <pre id="extractedText">Your extracted content will appear here...</pre>
+    <div id="wordCount"><span id="wordCountText">0 words</span></div>
+  </section>
 
-    <!-- History Section -->
-    <section class="history-section">
-      <div class="section-header">
-        <h3>History</h3>
-        <button id="clearHistoryBtn" class="clear-btn">Clear</button>
-      </div>
-      <div class="history-list" id="historyList">
-        <div class="empty-history">
-          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M12 8v4l3 3"></path>
-            <circle cx="12" cy="12" r="10"></circle>
-          </svg>
-          <p>No history yet</p>
-          <span>Scraped URLs will appear here</span>
-        </div>
-      </div>
-    </section>
+  <!-- HISTORY SECTION -->
+  <section class="history-section" id="historySection">
+    <div class="section-header">
+      <h3>History</h3>
+      <button id="clearHistoryBtn">Clear History</button>
+    </div>
+    <ul id="urlHistoryList" class="history-list"></ul>
+  </section>
 
-    <!-- Info Section -->
-    <section class="info-section">
-      <div class="info-grid">
-        <div class="info-card">
-          <div class="card-icon">⚡</div>
-          <h4>Fast Extraction</h4>
-          <p>Scrape chapters quickly from supported sites with smart detection.</p>
-        </div>
-        <div class="info-card">
-          <div class="card-icon">🌙</div>
-          <h4>Dark Mode</h4>
-          <p>Toggle between light and dark theme for comfortable reading.</p>
-        </div>
-        <div class="info-card">
-          <div class="card-icon">📖</div>
-          <h4>Chapter Navigation</h4>
-          <p>Easily move between chapters using next and previous buttons.</p>
-        </div>
-      </div>
-    </section>
+  <!-- LEGACY / EXTRA ELEMENTS -->
+  <div id="statusMsg"></div>
+  <div id="resultBox"></div>
+  <div id="resultCount"></div>
+  <input id="lockInput" type="text">
+  <div id="patternStatus"></div>
+  <div id="chapterDisplay"></div>
 
-    <!-- Status Bar -->
-    <section class="status-bar">
-      <div class="status-item success" id="statusSuccess">
-        ✅ Ready
-      </div>
-      <div class="status-item error hidden" id="statusError">
-        ❌ Error occurred
-      </div>
-    </section>
-  </main>
+</main>
 
-  <script src="{{ url_for('static', filename='script.js') }}"></script>
+<!-- ================== SCRIPT ================== -->
+<script src="app.js"></script>
 </body>
 </html>
