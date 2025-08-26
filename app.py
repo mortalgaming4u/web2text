@@ -10,13 +10,11 @@ import time
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Create the app
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "your-secret-key-here")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 def is_valid_url(url):
-    """Validate if the provided string is a valid URL"""
     try:
         result = urlparse(url)
         return all([result.scheme, result.netloc])
@@ -24,19 +22,14 @@ def is_valid_url(url):
         return False
 
 def clean_text(text):
-    """Clean and format extracted text"""
     if not text:
         return ""
-    
     text = re.sub(r'\n\s*\n', '\n\n', text)
     text = re.sub(r'\s+', ' ', text)
-    text = text.strip()
-    
-    return text
+    return text.strip()
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    """Main page with URL input form and results"""
     results = []
     urls_input = ''
     
@@ -56,23 +49,13 @@ def index():
                         url = 'https://' + url
                     
                     if not is_valid_url(url):
-                        results.append({
-                            'url': url,
-                            'success': False,
-                            'error': 'Invalid URL format',
-                            'text': ''
-                        })
+                        results.append({'url': url, 'success': False, 'error': 'Invalid URL format', 'text': ''})
                         continue
                     
                     try:
-                        start_time = time.time()
                         app.logger.info(f"Extracting text from: {url}")
-                        
                         result = extract_text_and_metadata(url)
                         raw_text = result.get("text", "")
-                        method_used = result.get("method", "unknown")
-                        
-                        elapsed_time = round(time.time() - start_time, 2)
                         
                         if raw_text:
                             cleaned_text = clean_text(raw_text)
@@ -84,32 +67,20 @@ def index():
                                 'word_count': len(cleaned_text.split()) if cleaned_text else 0,
                                 'title': result.get("title", ""),
                                 'meta_description': result.get("meta_description", ""),
-                                'method': method_used
+                                'method': result.get("method", "")
                             })
-                            app.logger.info(f"[{method_used.upper()}] Extracted {len(cleaned_text)} chars from {url} in {elapsed_time}s")
+                            app.logger.info(f"Successfully extracted {len(cleaned_text)} characters from {url}")
                         else:
-                            results.append({
-                                'url': url,
-                                'success': False,
-                                'error': 'No text content found on this page',
-                                'text': ''
-                            })
-                            app.logger.warning(f"[{method_used.upper()}] No content found for {url} (took {elapsed_time}s)")
+                            results.append({'url': url, 'success': False, 'error': 'No text content found', 'text': ''})
                             
                     except Exception as e:
                         app.logger.error(f"Error extracting from {url}: {str(e)}")
-                        results.append({
-                            'url': url,
-                            'success': False,
-                            'error': f'Failed to extract text: {str(e)}',
-                            'text': ''
-                        })
+                        results.append({'url': url, 'success': False, 'error': f'Failed: {str(e)}', 'text': ''})
     
     return render_template('index.html', results=results, urls_input=urls_input)
 
 @app.route('/export')
 def export_text():
-    """Export extracted text as a plain text file"""
     text_content = request.args.get('content', '')
     filename = request.args.get('filename', 'extracted_text.txt')
     
@@ -119,4 +90,34 @@ def export_text():
     
     response = make_response(text_content)
     response.headers['Content-Type'] = 'text/plain'
-    response.headers['Content-Disposition']
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': time.time()})
+
+# ✅ Fix: Add missing endpoints for UI calls
+@app.route('/check-lock', methods=['POST'])
+def check_lock():
+    return jsonify({'locked': False})
+
+@app.route('/extract', methods=['POST'])
+def extract_api():
+    data = request.get_json() or {}
+    url = data.get('url', '').strip()
+    if not url:
+        return jsonify({'success': False, 'error': 'No URL provided'}), 400
+
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+
+    try:
+        result = extract_text_and_metadata(url)
+        return jsonify({'success': True, 'data': result})
+    except Exception as e:
+        app.logger.error(f"Error during AJAX extract for {url}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=True)
