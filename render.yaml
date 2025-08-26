@@ -1,10 +1,15 @@
 services:
   - type: web
-    name: web2text
+    name: webtextextract
+    env: python
     runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python web2text.py"
+    buildCommand: pip install flask gunicorn trafilatura requests urllib3 lxml psycopg2-binary flask-sqlalchemy email-validator
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 main:app
     envVars:
+      - key: SESSION_SECRET
+        generateValue: true
       - key: PYTHON_VERSION
         value: "3.11"
+    healthCheckPath: /
+    autoDeploy: true
     plan: free
