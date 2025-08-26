@@ -51,21 +51,29 @@
     <!-- Main Content -->
     <main class="main-container">
         <!-- URL Input Section -->
-        <div class="input-section">
-            <div class="input-group">
-                <input 
-                    type="url" 
-                    id="urlInput" 
-                    placeholder="Enter webnovel chapter URL (auto-detects patterns)"
-                    class="url-input"
-                >
-                <button id="extractBtn" class="extract-btn" disabled>
-                    <span class="btn-text">Extract</span>
-                    <div class="spinner hidden">
-                        <div class="spinner-circle"></div>
-                    </div>
-                </button>
+<div class="input-section">
+    <div class="input-group">
+        <input 
+            type="url" 
+            id="urlInput" 
+            placeholder="Enter webnovel chapter URL (auto-detects patterns)"
+            class="url-input"
+        >
+        <button id="extractBtn" class="extract-btn" disabled>
+            <span class="btn-text">Extract</span>
+            <div class="spinner hidden">
+                <div class="spinner-circle"></div>
             </div>
+        </button>
+    </div>
+
+    <!-- New Force Extract Option -->
+    <label class="force-extract-label">
+        <input type="checkbox" id="forceExtract">
+        Force Extract (ignore pattern)
+    </label>
+</div>
+
         </div>
 
         <!-- Navigation Controls -->
