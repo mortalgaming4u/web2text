@@ -1,74 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Web Text Extractor</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Text Extractor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-theme="light">
 
-<!-- ================== HEADER ================== -->
-<header class="copilot-header">
-  <div class="header-container">
-    <div class="logo-section">
-      <div class="copilot-logo">🅲</div>
+  <!-- ================== HEADER ================== -->
+  <header class="copilot-header">
+    <div class="header-container">
+      <div class="logo-section">
+        <div class="copilot-logo">🅲</div>
+      </div>
+      <div class="brand-section">
+        <div class="brand-name">WebTextExtract</div>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggle" class="theme-toggle">🌓</button>
+      </div>
     </div>
-    <div class="brand-section">
-      <div class="brand-name">WebTextExtract</div>
-    </div>
-    <div class="header-actions">
-      <button id="themeToggle" class="theme-toggle">🌓</button>
-    </div>
-  </div>
-</header>
+  </header>
 
-<!-- ================== MAIN CONTAINER ================== -->
-<main class="main-container">
+  <!-- ================== MAIN CONTAINER ================== -->
+  <main class="main-container">
 
-  <!-- INPUT SECTION -->
-  <section class="input-section">
-    <div class="input-group">
-      <input type="text" id="urlInput" class="url-input" placeholder="Enter URL">
-      <button id="extractBtn" class="extract-btn" disabled>Extract</button>
-    </div>
-    <div class="input-group" style="margin-top: 10px;">
-      <button id="prevBtn" class="nav-btn" disabled>Prev</button>
-      <button id="nextBtn" class="nav-btn" disabled>Next</button>
-      <button id="copyBtn" class="nav-btn">Copy</button>
-      <label style="display:flex;align-items:center;gap:4px;">
-        <input type="checkbox" id="forceExtract"> Force Extract
-      </label>
-    </div>
-    <div id="statusIndicator" style="margin-top:8px;"></div>
-  </section>
+    <!-- INPUT SECTION -->
+    <section class="input-section">
+      <div class="input-group">
+        <input type="text" id="urlInput" class="url-input" placeholder="Enter URL" />
+        <button id="extractBtn" class="extract-btn" disabled>Extract</button>
+      </div>
+      <div class="input-group" style="margin-top: 10px;">
+        <button id="prevBtn" class="nav-btn" disabled>Prev</button>
+        <button id="nextBtn" class="nav-btn" disabled>Next</button>
+        <button id="copyBtn" class="nav-btn">Copy</button>
+        <label style="display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="forceExtract" /> Force Extract
+        </label>
+      </div>
+      <div id="statusIndicator" style="margin-top:8px;"></div>
+    </section>
 
-  <!-- CONTENT DISPLAY -->
-  <section class="content-section" id="contentBox">
-    <pre id="extractedText">Your extracted content will appear here...</pre>
-    <div id="wordCount"><span id="wordCountText">0 words</span></div>
-  </section>
+    <!-- CONTENT DISPLAY -->
+    <section class="content-section" id="contentBox">
+      <pre id="extractedText">Your extracted content will appear here...</pre>
+      <div id="wordCount"><span id="wordCountText">0 words</span></div>
+    </section>
 
-  <!-- HISTORY SECTION -->
-  <section class="history-section" id="historySection">
-    <div class="section-header">
-      <h3>History</h3>
-      <button id="clearHistoryBtn">Clear History</button>
-    </div>
-    <ul id="urlHistoryList" class="history-list"></ul>
-  </section>
+    <!-- HISTORY SECTION -->
+    <section class="history-section" id="historySection">
+      <div class="section-header">
+        <h3>History</h3>
+        <button id="clearHistoryBtn">Clear History</button>
+      </div>
+      <ul id="urlHistoryList" class="history-list"></ul>
+    </section>
 
-  <!-- LEGACY / EXTRA ELEMENTS -->
-  <div id="statusMsg"></div>
-  <div id="resultBox"></div>
-  <div id="resultCount"></div>
-  <input id="lockInput" type="text">
-  <div id="patternStatus"></div>
-  <div id="chapterDisplay"></div>
+    <!-- LEGACY / EXTRA ELEMENTS -->
+    <div id="statusMsg"></div>
+    <div id="resultBox"></div>
+    <div id="resultCount"></div>
+    <input id="lockInput" type="text" />
+    <div id="patternStatus"></div>
+    <div id="chapterDisplay"></div>
 
-</main>
+  </main>
 
-<!-- ================== SCRIPT ================== -->
-<script src="app.js"></script>
+  <!-- ================== SCRIPT ================== -->
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
