@@ -52,17 +52,32 @@ class WebTextExtractApp {
             urlHistoryList: document.getElementById('urlHistoryList'),
             clearHistoryBtn: document.getElementById('clearHistoryBtn'),
 
-            forceExtract: document.getElementById('forceExtract')
+            forceExtract: document.getElementById('forceExtract'),
+            
+            // New URL box elements
+            powerIcon: document.getElementById('powerIcon'),
+            addIcon: document.getElementById('addIcon'),
+            modeToggle: document.getElementById('modeToggle'),
+            previewSnippet: document.getElementById('previewSnippet')
         };
+    }
+
+    // -------------------------------
+    // Theme Initialization
+    // -------------------------------
+    initializeTheme() {
+        document.body.setAttribute('data-theme', this.theme);
     }
 
     // -------------------------------
     // Event Listeners
     // -------------------------------
     bindEvents() {
+        // Original event listeners
         this.elements.urlInput.addEventListener('input', () => {
             this.validateInput();
             this.updateChapterPattern();
+            this.handleAutoExtract(); // New auto-extract functionality
         });
 
         this.elements.extractBtn.addEventListener('click', () => this.extractContent());
@@ -94,6 +109,157 @@ class WebTextExtractApp {
             if (e.key === 'ArrowLeft') this.navigateChapter(-1);
             if (e.key === 'ArrowRight') this.navigateChapter(1);
         });
+
+        // New URL box event listeners
+        this.bindNewUrlBoxEvents();
+    }
+
+    // -------------------------------
+    // New URL Box Event Listeners
+    // -------------------------------
+    bindNewUrlBoxEvents() {
+        // Power Icon - Toggle between Auto Extract and Manual Mode
+        if (this.elements.powerIcon) {
+            this.elements.powerIcon.addEventListener('click', () => {
+                const toggle = this.elements.modeToggle;
+                toggle.checked = !toggle.checked;
+                this.updateModeToggleText();
+                this.updatePreviewSnippet();
+                
+                // Visual feedback for power icon
+                this.elements.powerIcon.style.color = toggle.checked ? '#0078d4' : '#ff4444';
+                this.elements.powerIcon.style.transform = 'scale(1.2)';
+                setTimeout(() => {
+                    this.elements.powerIcon.style.transform = 'scale(1)';
+                }, 200);
+            });
+        }
+
+        // Add Icon - Add URL to queue/history
+        if (this.elements.addIcon) {
+            this.elements.addIcon.addEventListener('click', () => {
+                const url = this.elements.urlInput.value.trim();
+                if (url) {
+                    this.addUrlToQueue(url);
+                    
+                    // Visual feedback
+                    this.elements.addIcon.style.transform = 'rotate(90deg) scale(1.2)';
+                    setTimeout(() => {
+                        this.elements.addIcon.style.transform = 'rotate(0deg) scale(1)';
+                    }, 300);
+                } else {
+                    this.updateStatus('Please enter a URL first', 'error');
+                }
+            });
+        }
+
+        // Mode Toggle - Handle auto extract mode changes
+        if (this.elements.modeToggle) {
+            this.elements.modeToggle.addEventListener('change', () => {
+                this.updateModeToggleText();
+                this.updatePreviewSnippet();
+                this.updateStatus(
+                    this.elements.modeToggle.checked 
+                        ? 'Auto Extract mode enabled' 
+                        : 'Manual mode enabled', 
+                    'success'
+                );
+            });
+        }
+    }
+
+    // -------------------------------
+    // New URL Box Helper Methods
+    // -------------------------------
+    updateModeToggleText() {
+        const toggle = this.elements.modeToggle;
+        const label = toggle.nextElementSibling;
+        if (label) {
+            label.textContent = toggle.checked ? 'Auto Extract' : 'Manual Mode';
+        }
+    }
+
+    updatePreviewSnippet() {
+        if (!this.elements.previewSnippet) return;
+        
+        const isAutoMode = this.elements.modeToggle.checked;
+        const url = this.elements.urlInput.value.trim();
+        
+        if (isAutoMode) {
+            this.elements.previewSnippet.classList.add('active');
+            if (url) {
+                this.elements.previewSnippet.textContent = `Ready to auto-extract: ${this.shortenUrl(url)}`;
+            } else {
+                this.elements.previewSnippet.textContent = 'Auto Extract mode enabled - content will be extracted automatically when URL is entered.';
+            }
+        } else {
+            this.elements.previewSnippet.classList.remove('active');
+        }
+    }
+
+    addUrlToQueue(url) {
+        this.elements.previewSnippet.textContent = `Queued: ${this.shortenUrl(url)}`;
+        this.elements.previewSnippet.classList.add('active');
+        
+        // Add to history immediately
+        this.addUrlToHistory(url);
+        
+        // If in auto mode, extract immediately
+        if (this.elements.modeToggle.checked) {
+            setTimeout(() => this.extractContent(), 500);
+        }
+        
+        // Optional: POST to Flask backend for queuing
+        this.sendToBackend(url);
+    }
+
+    async sendToBackend(url) {
+        try {
+            const response = await this.makeRequest('/queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, action: 'queue' })
+            });
+            const result = await response.json();
+            console.log('Queued to backend:', result);
+        } catch (error) {
+            console.warn('Failed to queue to backend:', error);
+        }
+    }
+
+    handleAutoExtract() {
+        if (!this.elements.modeToggle.checked) return;
+        
+        const url = this.elements.urlInput.value.trim();
+        if (url && this.isValidUrl(url)) {
+            // Debounce auto-extract to avoid too many requests
+            clearTimeout(this.autoExtractTimeout);
+            this.autoExtractTimeout = setTimeout(() => {
+                this.updatePreviewSnippet();
+                // Auto-extract after 1 second of inactivity
+                setTimeout(() => {
+                    if (this.elements.modeToggle.checked && this.elements.urlInput.value.trim() === url) {
+                        this.extractContent();
+                    }
+                }, 1000);
+            }, 500);
+        } else {
+            this.updatePreviewSnippet();
+        }
+    }
+
+    isValidUrl(string) {
+        try {
+            new URL(string);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    shortenUrl(url) {
+        if (url.length <= 50) return url;
+        return url.substring(0, 47) + '...';
     }
 
     // -------------------------------
@@ -286,6 +452,16 @@ class WebTextExtractApp {
     updateStatus(message, type) {
         this.elements.statusIndicator.textContent = message;
         this.elements.statusIndicator.className = `status ${type}`;
+        
+        // Auto-clear success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                if (this.elements.statusIndicator.textContent === message) {
+                    this.elements.statusIndicator.textContent = '';
+                    this.elements.statusIndicator.className = '';
+                }
+            }, 3000);
+        }
     }
 
     displayContent(content) {
@@ -309,6 +485,9 @@ class WebTextExtractApp {
     addUrlToHistory(url) {
         if (!this.urlHistory.includes(url)) {
             this.urlHistory.unshift(url);
+            if (this.urlHistory.length > 50) { // Limit history to 50 items
+                this.urlHistory = this.urlHistory.slice(0, 50);
+            }
             this.saveToStorage('urlHistory', this.urlHistory);
             this.updateHistoryList();
         }
@@ -318,19 +497,48 @@ class WebTextExtractApp {
         this.urlHistory = [];
         this.saveToStorage('urlHistory', this.urlHistory);
         this.updateHistoryList();
+        this.updateStatus('History cleared', 'success');
     }
 
     updateHistoryList() {
         const list = this.elements.urlHistoryList;
         if (!list) return;
         list.innerHTML = '';
-        this.urlHistory.forEach(url => {
+        this.urlHistory.forEach((url, index) => {
             const li = document.createElement('li');
-            li.textContent = url;
+            
+            // Create history item structure
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'history-item-icon';
+            iconDiv.textContent = (index + 1).toString();
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.style.flex = '1';
+            contentDiv.style.minWidth = '0';
+            
+            const urlText = document.createElement('div');
+            urlText.textContent = this.shortenUrl(url);
+            urlText.style.fontWeight = '500';
+            urlText.style.marginBottom = '2px';
+            
+            const timeText = document.createElement('div');
+            timeText.textContent = 'Click to load';
+            timeText.style.fontSize = '12px';
+            timeText.style.color = 'var(--text-muted)';
+            
+            contentDiv.appendChild(urlText);
+            contentDiv.appendChild(timeText);
+            
+            li.appendChild(iconDiv);
+            li.appendChild(contentDiv);
+            
             li.onclick = () => {
                 this.elements.urlInput.value = url;
+                this.validateInput();
+                this.updateChapterPattern();
                 this.extractContent();
             };
+            
             list.appendChild(li);
         });
     }
@@ -351,25 +559,38 @@ class WebTextExtractApp {
 
     copyContent() {
         const text = this.elements.extractedText.textContent;
-        navigator.clipboard.writeText(text).then(() => {
-            this.updateStatus('📋 Copied to clipboard', 'success');
-        });
+        if (text && text !== 'Your extracted content will appear here...') {
+            navigator.clipboard.writeText(text).then(() => {
+                this.updateStatus('📋 Copied to clipboard', 'success');
+            }).catch(() => {
+                this.updateStatus('Failed to copy to clipboard', 'error');
+            });
+        } else {
+            this.updateStatus('No content to copy', 'error');
+        }
     }
 
     toggleTheme() {
         this.theme = this.theme === 'light' ? 'dark' : 'light';
         document.body.setAttribute('data-theme', this.theme);
         this.saveToStorage('theme', this.theme);
+        this.updateStatus(`Switched to ${this.theme} theme`, 'success');
     }
 
     saveToStorage(key, value) {
-        localStorage.setItem(key, JSON.stringify(value));
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+            console.warn('Failed to save to localStorage:', error);
+        }
     }
 
     loadFromStorage(key) {
         try {
-            return JSON.parse(localStorage.getItem(key));
-        } catch {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (error) {
+            console.warn('Failed to load from localStorage:', error);
             return null;
         }
     }
@@ -377,16 +598,42 @@ class WebTextExtractApp {
     updateUI() {
         document.body.setAttribute('data-theme', this.theme);
         this.updateChapterPattern();
+        this.updateModeToggleText();
+        this.updatePreviewSnippet();
+        
+        // Set initial power icon color
+        if (this.elements.powerIcon && this.elements.modeToggle) {
+            this.elements.powerIcon.style.color = this.elements.modeToggle.checked ? '#0078d4' : '#ccc';
+        }
     }
 
     async makeRequest(url, options) {
-        return fetch(url, options);
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            throw error;
+        }
     }
 }
 
 // -------------------------------
-// Init
+// Initialize App
 // -------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new WebTextExtractApp();
+    try {
+        window.app = new WebTextExtractApp();
+        console.log('WebTextExtract App successfully initialized');
+    } catch (error) {
+        console.error('Failed to initialize WebTextExtract App:', error);
+    }
 });
