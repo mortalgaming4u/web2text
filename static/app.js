@@ -11,24 +11,58 @@ document.addEventListener("DOMContentLoaded", () => {
   const historyList = document.getElementById("urlHistoryList");
   const clearHistoryBtn = document.getElementById("clearHistoryBtn");
   const themeToggle = document.getElementById("themeToggle");
+  const chapterDisplay = document.getElementById("chapterDisplay");
 
-  let currentUrl = "";
-  let chapterPattern = "";
-  let chapterIndex = 0;
+  let chapterPattern = null;
+  let chapterIndex = null;
   let history = JSON.parse(localStorage.getItem("urlHistory") || "[]");
 
-  urlInput.addEventListener("input", () => {
-    extractBtn.disabled = !urlInput.value.trim();
-  });
+  // Load theme
+  const savedTheme = localStorage.getItem("theme") || "light";
+  document.body.setAttribute("data-theme", savedTheme);
+  themeToggle.textContent = savedTheme === "dark" ? "🌙" : "🌓";
 
-  extractBtn.addEventListener("click", () => {
-    const url = urlInput.value.trim();
-    const force = forceExtract.checked;
-    if (!url) return;
+  // ========== Pattern detection ==========
+  function detectPattern(url) {
+    // Support /chapter-12, /P12, /12.html
+    const patterns = [
+      /(.+\/chapter-)(\d+)([^\/]*)$/i,
+      /(.+\/P)(\d+)([^\/]*)$/i,
+      /(.+\/)(\d+)\.html?$/i
+    ];
+    for (const regex of patterns) {
+      const match = url.match(regex);
+      if (match) return { prefix: match[1], number: parseInt(match[2]), suffix: match[3] || "" };
+    }
+    return null;
+  }
 
-    currentUrl = url;
+  function getChapterIndex(url) {
+    const pat = detectPattern(url);
+    return pat ? pat.number : null;
+  }
+
+  function buildChapterUrl(pattern, number) {
+    return `${pattern.prefix}${number}${pattern.suffix}`;
+  }
+
+  function updateChapterInfo(url) {
     chapterPattern = detectPattern(url);
-    chapterIndex = extractChapterIndex(url);
+    chapterIndex = chapterPattern ? chapterPattern.number : null;
+    chapterDisplay.textContent = chapterIndex ? `Chapter ${chapterIndex}` : "";
+  }
+
+  function updateNavButtons() {
+    prevBtn.disabled = !chapterPattern || chapterIndex <= 1;
+    nextBtn.disabled = !chapterPattern;
+  }
+
+  // ========== Extraction ==========
+  function extractContent(force = false) {
+    const url = urlInput.value.trim();
+    if (!url) return;
+    updateChapterInfo(url);
+    updateNavButtons();
     updateStatus("Extracting...", "");
 
     fetch("/scrape", {
@@ -38,71 +72,51 @@ document.addEventListener("DOMContentLoaded", () => {
     })
       .then(res => res.json())
       .then(data => {
-        if (data.status === "no_pattern") {
-          updateStatus("No pattern detected. Try Force Extract.", "error");
-          extractedText.textContent = "No content yet.";
+        if (!data || !data.content) {
+          extractedText.textContent = "No content found.";
           wordCountText.textContent = "0 words";
+          updateStatus("Extraction failed", "error");
           return;
         }
-
-        extractedText.textContent = data.content || "No content found.";
-        wordCountText.textContent = `${(data.content || "").split(/\s+/).filter(Boolean).length} words`;
+        extractedText.textContent = data.content;
+        const wc = (data.content || "").split(/\s+/).filter(Boolean).length;
+        wordCountText.textContent = `${wc} word${wc === 1 ? "" : "s"}`;
         updateStatus("Extraction successful", "success");
         addToHistory(url);
         updateNavButtons();
       })
       .catch(err => {
-        console.error(err);
         updateStatus("Extraction failed", "error");
         extractedText.textContent = "";
         wordCountText.textContent = "0 words";
       });
-  });
+  }
 
-  copyBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(extractedText.textContent);
-    updateStatus("Copied to clipboard", "success");
-  });
-
-  prevBtn.addEventListener("click", () => navigateChapter(-1));
-  nextBtn.addEventListener("click", () => navigateChapter(1));
-
+  // ========== Chapter navigation ==========
   function navigateChapter(offset) {
     if (!chapterPattern) return;
-    chapterIndex += offset;
-    const newUrl = currentUrl.replace(chapterPattern, chapterPattern.replace(/\d+/, chapterIndex));
+    const newNum = chapterIndex + offset;
+    if (newNum < 1) return;
+    const newUrl = buildChapterUrl(chapterPattern, newNum);
     urlInput.value = newUrl;
-    extractBtn.click();
+    updateChapterInfo(newUrl);
+    extractContent(forceExtract.checked);
   }
 
-  function detectPattern(url) {
-    const match = url.match(/(p|ch|chapter)(\\d+)\\.html/i);
-    return match ? match[0] : "";
-  }
-
-  function extractChapterIndex(url) {
-    const match = url.match(/(\\d+)\\.html$/);
-    return match ? parseInt(match[1]) : 1;
-  }
-
-  function updateNavButtons() {
-    const hasPattern = !!chapterPattern;
-    prevBtn.disabled = !hasPattern || chapterIndex <= 1;
-    nextBtn.disabled = !hasPattern;
-  }
-
-  function updateStatus(message, type) {
-    statusIndicator.textContent = message;
+  // ========== Status ==========
+  function updateStatus(text, type) {
+    statusIndicator.textContent = text;
     statusIndicator.className = type ? `status ${type}` : "";
   }
 
+  // ========== History ==========
   function addToHistory(url) {
     if (!history.includes(url)) {
       history.unshift(url);
       if (history.length > 10) history.pop();
       localStorage.setItem("urlHistory", JSON.stringify(history));
-      renderHistory();
     }
+    renderHistory();
   }
 
   function renderHistory() {
@@ -112,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       li.textContent = url;
       li.addEventListener("click", () => {
         urlInput.value = url;
+        updateChapterInfo(url);
         extractBtn.disabled = false;
       });
       historyList.appendChild(li);
@@ -124,12 +139,41 @@ document.addEventListener("DOMContentLoaded", () => {
     renderHistory();
   });
 
+  // ========== Theme ==========
   themeToggle.addEventListener("click", () => {
     const current = document.body.getAttribute("data-theme");
     const next = current === "dark" ? "light" : "dark";
     document.body.setAttribute("data-theme", next);
-    themeToggle.textContent = next === "dark" ? "🌙" : "🌞";
+    localStorage.setItem("theme", next);
+    themeToggle.textContent = next === "dark" ? "🌙" : "🌓";
   });
 
+  // ========== Copy ==========
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(extractedText.textContent);
+    updateStatus("Copied to clipboard", "success");
+  });
+
+  // ========== Button listeners ==========
+  urlInput.addEventListener("input", () => {
+    extractBtn.disabled = !urlInput.value.trim();
+    updateChapterInfo(urlInput.value.trim());
+    updateNavButtons();
+  });
+
+  extractBtn.addEventListener("click", () => extractContent(forceExtract.checked));
+  prevBtn.addEventListener("click", () => navigateChapter(-1));
+  nextBtn.addEventListener("click", () => navigateChapter(1));
+
+  // Keyboard navigation
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+    if (e.key === "ArrowLeft") navigateChapter(-1);
+    if (e.key === "ArrowRight") navigateChapter(1);
+  });
+
+  // ========== Init ==========
   renderHistory();
+  updateChapterInfo(urlInput.value.trim());
+  updateNavButtons();
 });
