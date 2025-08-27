@@ -5,6 +5,97 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Web Text Extractor</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* Styles for the new URL box */
+    .url-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      padding: 12px;
+      border: 2px solid #e1e5e9;
+      border-radius: 8px;
+      background: var(--bg-secondary, #f8f9fa);
+      transition: all 0.2s ease;
+    }
+
+    .url-box:focus-within {
+      border-color: #007acc;
+      box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.1);
+    }
+
+    .url-box input[type="text"] {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 8px;
+      font-size: 14px;
+      outline: none;
+      color: var(--text-primary, #333);
+    }
+
+    .url-box .icon {
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .url-box .icon:hover {
+      background: rgba(0, 122, 204, 0.1);
+      color: #007acc;
+    }
+
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text-primary, #333);
+    }
+
+    .toggle-label input[type="checkbox"] {
+      margin: 0;
+    }
+
+    .preview-snippet {
+      background: var(--bg-secondary, #f8f9fa);
+      border: 1px solid #e1e5e9;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      color: var(--text-secondary, #666);
+      max-height: 100px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .preview-snippet.active {
+      display: block;
+    }
+
+    /* Dark theme support */
+    [data-theme="dark"] .url-box {
+      background: var(--bg-secondary, #2d2d2d);
+      border-color: #444;
+    }
+
+    [data-theme="dark"] .url-box input[type="text"] {
+      color: var(--text-primary, #fff);
+    }
+
+    [data-theme="dark"] .preview-snippet {
+      background: var(--bg-secondary, #2d2d2d);
+      border-color: #444;
+      color: var(--text-secondary, #ccc);
+    }
+  </style>
 </head>
 <body data-theme="light">
 
@@ -28,8 +119,21 @@
 
     <!-- INPUT SECTION -->
     <section class="input-section">
+      <!-- NEW URL BOX -->
+      <div class="url-box">
+        <input type="text" id="urlInput" placeholder="Paste URL here..." />
+        <span class="icon" id="addIcon">+</span>
+        <span class="icon" id="powerIcon">⏻</span>
+      </div>
+      <label class="toggle-label">
+        <input type="checkbox" id="modeToggle" checked />
+        <span>Auto Extract</span>
+      </label>
+      <div id="previewSnippet" class="preview-snippet"></div>
+
+      <!-- EXISTING INPUT GROUP -->
       <div class="input-group">
-        <input type="text" id="urlInput" class="url-input" placeholder="Enter URL" />
+        <input type="text" id="urlInputOld" class="url-input" placeholder="Enter URL" style="display: none;" />
         <button id="extractBtn" class="extract-btn" disabled>Extract</button>
       </div>
       <div class="input-group" style="margin-top: 10px;">
@@ -69,6 +173,54 @@
   </main>
 
   <!-- ================== SCRIPT ================== -->
+  <script>
+    // Basic functionality for the new elements
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlInput = document.getElementById('urlInput');
+      const addIcon = document.getElementById('addIcon');
+      const powerIcon = document.getElementById('powerIcon');
+      const modeToggle = document.getElementById('modeToggle');
+      const previewSnippet = document.getElementById('previewSnippet');
+      const extractBtn = document.getElementById('extractBtn');
+
+      // Sync the new URL input with the extract button
+      urlInput.addEventListener('input', function() {
+        extractBtn.disabled = !this.value.trim();
+      });
+
+      // Add icon functionality
+      addIcon.addEventListener('click', function() {
+        const url = urlInput.value.trim();
+        if (url) {
+          // Add to history or perform add action
+          console.log('Adding URL:', url);
+        }
+      });
+
+      // Power icon functionality
+      powerIcon.addEventListener('click', function() {
+        // Toggle power state or perform power action
+        console.log('Power toggle clicked');
+        this.style.color = this.style.color === 'red' ? '' : 'red';
+      });
+
+      // Mode toggle functionality
+      modeToggle.addEventListener('change', function() {
+        if (this.checked) {
+          previewSnippet.classList.add('active');
+          previewSnippet.textContent = 'Auto extract mode enabled - content will be extracted automatically when URL is entered.';
+        } else {
+          previewSnippet.classList.remove('active');
+        }
+      });
+
+      // Initialize auto extract mode
+      if (modeToggle.checked) {
+        previewSnippet.classList.add('active');
+        previewSnippet.textContent = 'Auto extract mode enabled - content will be extracted automatically when URL is entered.';
+      }
+    });
+  </script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
