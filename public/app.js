@@ -13,6 +13,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("themeToggle");
   const chapterDisplay = document.getElementById("chapterDisplay");
 
+  // ✅ Full book button + status
+  const scrapeBookBtn = document.getElementById("scrapeBookBtn");
+  const scrapeStatus = document.getElementById("scrapeStatus");
+
   let chapterPattern = null;
   let chapterIndex = null;
   let history = JSON.parse(localStorage.getItem("urlHistory") || "[]");
@@ -55,7 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
     nextBtn.disabled = !chapterPattern;
   }
 
-  // ========== Extraction ==========
+  // ========== Single Chapter Extraction ==========
   function extractContent(force = false) {
     const url = urlInput.value.trim();
     if (!url) return;
@@ -64,26 +68,22 @@ document.addEventListener("DOMContentLoaded", () => {
     updateNavButtons();
     updateStatus("⏳ Extracting...", "");
 
-    fetch("/api/scrape-book", {
+    fetch("/api/scrape", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, force })
     })
       .then(res => res.json())
       .then(data => {
-        if (data.status !== "success" || !Array.isArray(data.chapters)) {
+        if (data.status !== "success" || !data.text) {
           updateStatus(`❌ ${data.message || "Extraction failed"}`, "error");
           extractedText.textContent = "No content found.";
           wordCountText.textContent = "0 words";
           return;
         }
 
-        const chapterText = chapterIndex
-          ? data.chapters[chapterIndex - 1] || ""
-          : data.chapters[0] || "";
-
-        extractedText.textContent = chapterText;
-        const wc = chapterText.split(/\s+/).filter(Boolean).length;
+        extractedText.textContent = data.text;
+        const wc = data.text.split(/\s+/).filter(Boolean).length;
         wordCountText.textContent = `${wc} word${wc === 1 ? "" : "s"}`;
         updateStatus("✅ Extraction successful", "success");
 
@@ -94,6 +94,39 @@ document.addEventListener("DOMContentLoaded", () => {
         updateStatus(`❌ Request failed: ${err.message}`, "error");
         extractedText.textContent = "";
         wordCountText.textContent = "0 words";
+      });
+  }
+
+  // ========== Full Book Extraction ==========
+  function scrapeFullBook() {
+    const url = urlInput.value.trim();
+    if (!url) {
+      scrapeStatus.innerText = "❌ Please enter a starting chapter URL.";
+      return;
+    }
+
+    scrapeStatus.innerText = "⏳ Scraping full book... This may take a while.";
+
+    fetch("/api/scrape-book", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, maxChapters: 4000 }) // ✅ Cap set here
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status !== "success" || !Array.isArray(data.chapters)) {
+          scrapeStatus.innerText = `❌ ${data.message || "Scrape failed"}`;
+          return;
+        }
+
+        const allText = data.chapters.join("\n\n");
+        extractedText.textContent = allText;
+        const wc = allText.split(/\s+/).filter(Boolean).length;
+        wordCountText.textContent = `${wc} word${wc === 1 ? "" : "s"}`;
+        scrapeStatus.innerText = `✅ Scraped ${data.chapters.length} chapters successfully.`;
+      })
+      .catch(err => {
+        scrapeStatus.innerText = `❌ Request failed: ${err.message}`;
       });
   }
 
@@ -170,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
   extractBtn.addEventListener("click", () => extractContent(forceExtract.checked));
   prevBtn.addEventListener("click", () => navigateChapter(-1));
   nextBtn.addEventListener("click", () => navigateChapter(1));
+  scrapeBookBtn.addEventListener("click", scrapeFullBook);
 
   // Keyboard navigation
   document.addEventListener("keydown", (e) => {
