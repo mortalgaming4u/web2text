@@ -1,41 +1,31 @@
-from http.server import BaseHTTPRequestHandler
-import json
-from web_scraper import scrape_full_book  # use the new full book scraper
+from web_scraper import scrape_full_book
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        if self.path == "/scrape-book":
-            try:
-                content_length = int(self.headers['Content-Length'])
-                body = self.rfile.read(content_length)
-                data = json.loads(body)
+def handler(request):
+    try:
+        body = request.json()
+        url = body.get("url")
 
-                url = data.get("url")
-                if not url:
-                    self.send_response(400)
-                    self.send_header("Content-Type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(b'{"status":"error","message":"Missing URL"}')
-                    return
+        if not url or not isinstance(url, str):
+            return {
+                "status": "error",
+                "message": "Missing or invalid 'url' in request body"
+            }
 
-                chapters, text = scrape_full_book(url, max_chapters=2000)
+        print(f"[INFO] Starting scrape for: {url}")
+        result = scrape_full_book(url)
 
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                response = {
-                    "status": "success",
-                    "chapters_scraped": chapters,
-                    "preview": text[:500]  # send snippet only
-                }
-                self.wfile.write(json.dumps(response).encode())
+        # Optional: preview first chapter
+        preview = result["chapters"][0][:300] if result["chapters"] else ""
 
-            except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                error_response = {
-                    "status": "error",
-                    "message": str(e)
-                }
-                self.wfile.write(json.dumps(error_response).encode())
+        return {
+            "status": "success",
+            "chapters_scraped": len(result["chapters"]),
+            "preview": preview
+        }
+
+    except Exception as e:
+        print(f"[ERROR] {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
