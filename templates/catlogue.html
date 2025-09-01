@@ -1,0 +1,6 @@
+<h1>📚 凡人修仙傳 - 章節目錄</h1>
+<ul>
+  {% for chapter, data in chapters.items() %}
+    <li><a href="/read?chapter={{ chapter }}">第 {{ chapter }} 章</a></li>
+  {% endfor %}
+</ul>
