@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web Text Extractor</title>
+
+  <style>
+    /* ================== GLOBAL STYLES ================== */
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: var(--bg-primary, #fff);
+      color: var(--text-primary, #333);
+    }
+
+    header.copilot-header {
+      background: #007acc;
+      color: #fff;
+      padding: 12px 20px;
+    }
+
+    .header-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .copilot-logo {
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    .brand-name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .theme-toggle {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #fff;
+    }
+
+    main.main-container {
+      padding: 20px;
+    }
+
+    /* ================== URL BOX ================== */
+    .url-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      padding: 12px;
+      border: 2px solid #e1e5e9;
+      border-radius: 8px;
+      background: var(--bg-secondary, #f8f9fa);
+      transition: all 0.2s ease;
+    }
+
+    .url-box:focus-within {
+      border-color: #007acc;
+      box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.1);
+    }
+
+    .url-box input[type="text"] {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 8px;
+      font-size: 14px;
+      outline: none;
+      color: var(--text-primary, #333);
+    }
+
+    .url-box .icon {
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .url-box .icon:hover {
+      background: rgba(0, 122, 204, 0.1);
+      color: #007acc;
+    }
+
+    /* ================== TOGGLES ================== */
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      font-size: 14px;
+      color: var(--text-primary, #333);
+    }
+
+    .toggle-label input[type="checkbox"] {
+      margin: 0;
+    }
+
+    .preview-snippet {
+      background: var(--bg-secondary, #f8f9fa);
+      border: 1px solid #e1e5e9;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      color: var(--text-secondary, #666);
+      max-height: 100px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .preview-snippet.active {
+      display: block;
+    }
+
+    /* ================== BUTTONS ================== */
+    .input-group {
+      margin-top: 10px;
+    }
+
+    .extract-btn, .nav-btn {
+      padding: 6px 12px;
+      margin-right: 6px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #f1f1f1;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .extract-btn:disabled, .nav-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .extract-btn:hover:not(:disabled), .nav-btn:hover:not(:disabled) {
+      background: #e1e5e9;
+    }
+
+    /* ================== CONTENT SECTION ================== */
+    .content-section {
+      margin-top: 20px;
+      border: 1px solid #e1e5e9;
+      border-radius: 6px;
+      padding: 12px;
+      background: var(--bg-secondary, #f8f9fa);
+    }
+
+    pre#extractedText {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 14px;
+      line-height: 1.4;
+      margin: 0;
+    }
+
+    #wordCount {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    /* ================== HISTORY SECTION ================== */
+    .history-section {
+      margin-top: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .history-list {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0;
+    }
+
+    .history-list li {
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    /* ================== DARK THEME ================== */
+    [data-theme="dark"] {
+      --bg-primary: #1e1e1e;
+      --bg-secondary: #2d2d2d;
+      --text-primary: #fff;
+      --text-secondary: #ccc;
+    }
+
+    [data-theme="dark"] .url-box {
+      background: var(--bg-secondary);
+      border-color: #444;
+    }
+
+    [data-theme="dark"] .preview-snippet {
+      background: var(--bg-secondary);
+      border-color: #444;
+    }
+  </style>
+</head>
+<body data-theme="light">
+
+  <!-- ================== HEADER ================== -->
+  <header class="copilot-header">
+    <div class="header-container">
+      <div class="logo-section">
+        <div class="copilot-logo">🅲</div>
+      </div>
+      <div class="brand-section">
+        <div class="brand-name">WebTextExtract</div>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggle" class="theme-toggle">🌓</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================== MAIN ================== -->
+  <main class="main-container">
+    <section class="input-section">
+      <!-- URL Box -->
+      <div class="url-box">
+        <input type="text" id="urlInput" placeholder="Paste URL here..." />
+        <span class="icon" id="addIcon">+</span>
+        <span class="icon" id="powerIcon">⏻</span>
+      </div>
+
+      <label class="toggle-label">
+        <input type="checkbox" id="modeToggle" checked />
+        <span>Auto Extract</span>
+      </label>
+
+      <div id="previewSnippet" class="preview-snippet"></div>
+
+      <!-- Extract + Nav Buttons -->
+      <div class="input-group">
+        <input type="text" id="urlInputOld" class="url-input" placeholder="Enter URL" style="display: none;" />
+        <button id="extractBtn" class="extract-btn" disabled>Extract</button>
+      </div>
+
+      <div class="input-group">
+        <button id="prevBtn" class="nav-btn" disabled>Prev</button>
+        <button id="nextBtn" class="nav-btn" disabled>Next</button>
+        <button id="copyBtn" class="nav-btn">Copy</button>
+        <label style="display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="forceExtract" /> Force Extract
+        </label>
+      </div>
+
+      <!-- ✅ New Full Book Scrape Button -->
+      <div class="input-group">
+        <button id="scrapeBookBtn" class="nav-btn">📚 Fetch Full Book</button>
+      </div>
+      <div id="scrapeStatus" style="margin-top: 8px; font-size: 14px;"></div>
+
+      <div id="statusIndicator" style="margin-top:8px;"></div>
+    </section>
+
+    <!-- Content Section -->
+    <section class="content-section" id="contentBox">
+      <pre id="extractedText">Your extracted content will appear here...</pre>
+      <div id="wordCount"><span id="wordCountText">0 words</span></div>
+    </section>
+
+    <!-- History Section -->
+    <section class="history-section" id="historySection">
+      <div class="section-header">
+        <h3>History</h3>
+        <button id="clearHistoryBtn">Clear History</button>
+      </div>
+      <ul id="urlHistoryList" class="history-list"></ul>
+    </section>
+
+    <!-- Extra Elements -->
+    <div id="statusMsg"></div>
+    <div id="resultBox"></div>
+    <div id="resultCount"></div>
+    <input id="lockInput" type="text" />
+    <div id="patternStatus"></div>
+    <div id="chapterDisplay"></div>
+  </main>
+
+  <!-- ================== SCRIPT ================== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const urlInput = document.getElementById('urlInput');
+      const addIcon = document.getElementById('addIcon');
+      const powerIcon = document.getElementById('powerIcon');
+      const modeToggle = document.getElementById('modeToggle');
+      const previewSnippet = document.getElementById('previewSnippet');
+      const extractBtn = document.getElementById('extractBtn');
+      const themeToggle = document.getElementById('themeToggle');
+
+      // Enable Extract button when input has text
+      urlInput.addEventListener('input', function() {
+        extractBtn.disabled = !this.value.trim();
+      });
+
+      // Add icon action
+      addIcon.addEventListener('click', function() {
+        const url = urlInput.value.trim();
+        if (url) {
+          console.log('Adding URL:', url);
+        }
+      });
+
+      // Power icon action
+      powerIcon.addEventListener('click', function() {
+        console.log('Power toggle clicked');
+        this.style.color = this.style.color === 'red' ? '' : 'red';
+      });
+
+      // Mode toggle action
+      modeToggle.addEventListener('change', function() {
+        if (this.checked) {
+          previewSnippet.classList.add('active');
+          previewSnippet.textContent = 'Auto extract mode enabled - content will be extracted automatically when URL is entered.';
+        } else {
+          previewSnippet.classList.remove('active');
+        }
+      });
+
+      // Initialize auto extract mode
+      if (modeToggle.checked) {
+        previewSnippet.classList.add('active');
+        previewSnippet.textContent = 'Auto extract mode enabled - content will be extracted automatically when URL is entered.';
+      }
+
+      // Theme toggle (light/dark)
+      themeToggle.addEventListener('click', function() {
+        const currentTheme = document.body.getAttribute('data-theme');
+        document.body.setAttribute('data-theme', currentTheme === 'light' ? 'dark' : 'light');
+      });
+
+      // ✅ Full Book Scrape Logic
+      const scrapeBookBtn = document.getElementById("scrapeBookBtn");
+      const scrapeStatus = document.getElementById("scrapeStatus");
+
+      scrapeBookBtn.addEventListener("click", async () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+          scrapeStatus.innerText = "❌ Please enter a starting chapter URL.";
+          return;
+        }
+
+        scrapeStatus.innerText = "⏳ Scraping full book... This may take a while.";
+
+        try {
+          const response = await fetch("/scrape-book", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+          });
+
+          const result = await response.json();
+          if (result.status === "success") {
+            scrapeStatus.innerText = `✅ Scraped ${result.chapters_scraped} chapters successfully.`;
+          } else {
+            scrapeStatus.innerText = `❌ Error: ${result.message}`;
+          }
+        } catch (err) {
+          scrapeStatus.innerText = `❌ Request failed: ${err.message}`;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
