@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>📖 閱讀器</title>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; padding: 2rem; max-width: 800px; margin: auto; }
+    nav { margin-top: 2rem; display: flex; justify-content: space-between; }
+    a, button { text-decoration: none; color: #0077cc; background: none; border: none; cursor: pointer; font-size: 1rem; }
+    #chapterContent { margin-top: 2rem; }
+    #meta { font-size: 0.9rem; color: #555; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <h1 id="chapterTitle">📖 閱讀器</h1>
+  <div id="meta"></div>
+  <div id="chapterContent"></div>
+  <nav>
+    <button id="prevBtn">← 上一章</button>
+    <button id="nextBtn">下一章 →</button>
+    <button id="deleteBtn" style="margin-left:auto;">🗑️ 刪除書籍</button>
+  </nav>
+
+  <script>
+    const chapters = JSON.parse(localStorage.getItem("chapters") || "[]");
+    const title = localStorage.getItem("title") || "凡人修仙傳";
+    let current = parseInt(localStorage.getItem("currentChapter") || "0");
+
+    function renderChapter(index) {
+      if (chapters.length === 0) {
+        document.getElementById("chapterContent").textContent = "⚠️ 尚未載入任何章節。請返回首頁並開始抓取。";
+        document.getElementById("chapterTitle").textContent = "📖 閱讀器";
+        document.getElementById("meta").textContent = "";
+        return;
+      }
+
+      if (index < 0 || index >= chapters.length) return;
+      document.getElementById("chapterTitle").textContent = `📖 ${title} - 第 ${index + 1} 章`;
+      document.getElementById("chapterContent").textContent = chapters[index];
+      document.getElementById("meta").textContent = `共 ${chapters.length} 章 | 當前：第 ${index + 1} 章`;
+      localStorage.setItem("currentChapter", index);
+    }
+
+    document.getElementById("prevBtn").addEventListener("click", () => {
+      if (current > 0) renderChapter(--current);
+    });
+
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      if (current < chapters.length - 1) renderChapter(++current);
