@@ -293,7 +293,46 @@ def catalog():
     """Serve the table of contents for the full book."""
     return render_template("catalog.html", chapters=BOOK)
 
+@app.route('/scrape-book', methods=['POST'])
+def scrape_book():
+    """
+    Scrape an entire book starting from a given chapter URL.
+    Saves all chapters to book_data.json for use in /read and /catalog.
+    """
+    try:
+        data = request.get_json()
+        start_url = data.get('url')
+        if not start_url:
+            return jsonify({'status': 'error', 'message': 'URL is required'}), 400
 
+        # Detect chapter pattern using existing logic
+        chapter_info = extract_chapter_info(start_url, '')
+        if not chapter_info:
+            return jsonify({'status': 'error', 'message': 'Could not detect chapter pattern'}), 400
+
+        chapters = {}
+        max_chapters = 2500  # You can adjust this limit
+        for i in range(chapter_info['current_chapter'], max_chapters):
+            next_url = generate_chapter_url(chapter_info['url_template'], chapter_info['chapter_format'], i)
+            content = get_website_text_content(next_url)
+            if not content or not content.strip():
+                logging.info(f"Stopping at chapter {i}: no content found.")
+                break
+            chapters[str(i)] = {
+                'url': next_url,
+                'content': content.strip()
+            }
+            logging.debug(f"Scraped chapter {i}")
+
+        # Save to book_data.json
+        with open("book_data.json", "w", encoding="utf-8") as f:
+            json.dump(chapters, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'status': 'success', 'chapters_scraped': len(chapters)})
+
+    except Exception as e:
+        logging.error(f"Error in scrape-book: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 if __name__ == '__main__':
     # Launch the Flask dev server
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
