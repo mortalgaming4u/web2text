@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ========== Pattern detection ==========
   function detectPattern(url) {
-    // Support /chapter-12, /P12, /12.html
     const patterns = [
       /(.+\/chapter-)(\d+)([^\/]*)$/i,
       /(.+\/P)(\d+)([^\/]*)$/i,
@@ -32,14 +31,13 @@ document.addEventListener("DOMContentLoaded", () => {
     ];
     for (const regex of patterns) {
       const match = url.match(regex);
-      if (match) return { prefix: match[1], number: parseInt(match[2]), suffix: match[3] || "" };
+      if (match) return {
+        prefix: match[1],
+        number: parseInt(match[2]),
+        suffix: match[3] || ""
+      };
     }
     return null;
-  }
-
-  function getChapterIndex(url) {
-    const pat = detectPattern(url);
-    return pat ? pat.number : null;
   }
 
   function buildChapterUrl(pattern, number) {
@@ -61,32 +59,39 @@ document.addEventListener("DOMContentLoaded", () => {
   function extractContent(force = false) {
     const url = urlInput.value.trim();
     if (!url) return;
+
     updateChapterInfo(url);
     updateNavButtons();
-    updateStatus("Extracting...", "");
+    updateStatus("⏳ Extracting...", "");
 
-    fetch("/scrape", {
+    fetch("/api/scrape-book", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, force })
     })
       .then(res => res.json())
       .then(data => {
-        if (!data || !data.content) {
+        if (data.status !== "success" || !Array.isArray(data.chapters)) {
+          updateStatus(`❌ ${data.message || "Extraction failed"}`, "error");
           extractedText.textContent = "No content found.";
           wordCountText.textContent = "0 words";
-          updateStatus("Extraction failed", "error");
           return;
         }
-        extractedText.textContent = data.content;
-        const wc = (data.content || "").split(/\s+/).filter(Boolean).length;
+
+        const chapterText = chapterIndex
+          ? data.chapters[chapterIndex - 1] || ""
+          : data.chapters[0] || "";
+
+        extractedText.textContent = chapterText;
+        const wc = chapterText.split(/\s+/).filter(Boolean).length;
         wordCountText.textContent = `${wc} word${wc === 1 ? "" : "s"}`;
-        updateStatus("Extraction successful", "success");
+        updateStatus("✅ Extraction successful", "success");
+
         addToHistory(url);
         updateNavButtons();
       })
       .catch(err => {
-        updateStatus("Extraction failed", "error");
+        updateStatus(`❌ Request failed: ${err.message}`, "error");
         extractedText.textContent = "";
         wordCountText.textContent = "0 words";
       });
@@ -97,6 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!chapterPattern) return;
     const newNum = chapterIndex + offset;
     if (newNum < 1) return;
+
     const newUrl = buildChapterUrl(chapterPattern, newNum);
     urlInput.value = newUrl;
     updateChapterInfo(newUrl);
@@ -151,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ========== Copy ==========
   copyBtn.addEventListener("click", () => {
     navigator.clipboard.writeText(extractedText.textContent);
-    updateStatus("Copied to clipboard", "success");
+    updateStatus("✅ Copied to clipboard", "success");
   });
 
   // ========== Button listeners ==========
