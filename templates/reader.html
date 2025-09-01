@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Chapter {{ chapter }}</title>
+  <style>
+    body { font-family: sans-serif; line-height: 1.6; padding: 2rem; max-width: 800px; margin: auto; }
+    nav { margin-top: 2rem; }
+    a { margin: 0 1rem; text-decoration: none; color: #0077cc; }
+  </style>
+</head>
+<body>
+  <h1>📖 凡人修仙傳 - 第 {{ chapter }} 章</h1>
+  <div>{{ content | safe }}</div>
+  <nav>
+    {% if chapter > 1 %}
+      <a href="/read?chapter={{ chapter - 1 }}">← 上一章</a>
+    {% endif %}
+    <a href="/read?chapter={{ chapter + 1 }}">下一章 →</a>
+  </nav>
+</body>
+</html>
